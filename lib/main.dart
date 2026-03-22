@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart'; // ကော်မာ (,) အတွက် ခေါ်ထားပါသည်
+import 'package:intl/intl.dart';
 import 'providers/tracker_provider.dart';
 import 'widgets/add_tx_sheet.dart';
 import 'models/app_models.dart';
@@ -8,7 +8,10 @@ import 'services/drive_service.dart';
 
 void main() {
   runApp(
-    MultiProvider(providers: [ChangeNotifierProvider(create: (_) => TrackerProvider())], child: const DailyTrackerApp()),
+    MultiProvider(
+      providers: [ChangeNotifierProvider(create: (_) => TrackerProvider())],
+      child: const DailyTrackerApp(),
+    ),
   );
 }
 
@@ -16,7 +19,15 @@ class DailyTrackerApp extends StatelessWidget {
   const DailyTrackerApp({super.key});
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(title: 'Daily Tracker', debugShowCheckedModeBanner: false, theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent, background: const Color(0xFFF5F7FA)), useMaterial3: true), home: const MainScreen());
+    return MaterialApp(
+      title: 'Daily Tracker',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent, background: const Color(0xFFF5F7FA)),
+        useMaterial3: true,
+      ),
+      home: const MainScreen(),
+    );
   }
 }
 
@@ -46,6 +57,9 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
+// ==========================================
+// SCREEN 1: THE DAILY HUB (Current Balance & History)
+// ==========================================
 class DailyHubScreen extends StatefulWidget {
   const DailyHubScreen({super.key});
   @override
@@ -54,14 +68,12 @@ class DailyHubScreen extends StatefulWidget {
 
 class _DailyHubScreenState extends State<DailyHubScreen> {
   bool _showFullBalance = false;
-  void _toggleBalanceView() {
-    setState(() => _showFullBalance = true);
-    Future.delayed(const Duration(seconds: 3), () { if (mounted) setState(() => _showFullBalance = false); });
-  }
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TrackerProvider>(context);
+    final currencyFormat = NumberFormat('#,###');
+
     return Scaffold(
       appBar: AppBar(title: const Text('The Daily Hub', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26)), backgroundColor: Colors.transparent, elevation: 0),
       body: provider.isLoading ? const Center(child: CircularProgressIndicator()) : Column(
@@ -69,13 +81,17 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
           const SizedBox(height: 20),
           const Text('Current Balance (လက်ကျန်ငွေ)', style: TextStyle(color: Colors.grey, fontSize: 16)),
           GestureDetector(
-            onTap: _toggleBalanceView,
-            child: Text(_showFullBalance ? '${NumberFormat('#,###').format(provider.totalBalance)} Ks' : '${provider.formatLakh(provider.totalBalance)} Ks',
-                style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: provider.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent)),
+            onTap: () => setState(() {
+              _showFullBalance = true;
+              Future.delayed(const Duration(seconds: 3), () { if (mounted) setState(() => _showFullBalance = false); });
+            }),
+            child: Text(
+              _showFullBalance ? '${currencyFormat.format(provider.totalBalance)} Ks' : '${provider.formatLakh(provider.totalBalance)} Ks',
+              style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: provider.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent),
+            ),
           ),
           const SizedBox(height: 5),
-          // လစဉ်သုံးစရိတ်ကို အနီရောင်ဖြင့် ပြသမည်
-          Text('Monthly Expenses: -${NumberFormat('#,###').format(provider.currentMonthExpense)} Ks', 
+          Text('Monthly Expenses: -${currencyFormat.format(provider.currentMonthExpense)} Ks', 
                style: const TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           Expanded(
@@ -87,13 +103,30 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                 itemBuilder: (context, index) {
                   final tx = provider.transactions[index];
                   bool isExpense = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
-                  
                   final cat = provider.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
-                  return ListTile(
-                    leading: CircleAvatar(backgroundColor: isExpense ? Colors.red[50] : Colors.green[50], child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExpense ? Colors.redAccent : Colors.green)),
-                    title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
-                    trailing: Text('${isExpense ? '-' : '+'}${NumberFormat('#,###').format(tx.amount)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isExpense ? Colors.redAccent : Colors.green)),
+
+                  return Dismissible(
+                    key: Key(tx.id.toString()),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Colors.redAccent,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    onDismissed: (direction) {
+                      provider.deleteTransaction(tx.id!);
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: const Text('Deleted successfully'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 90, left: 20, right: 20))
+                      );
+                    },
+                    child: ListTile(
+                      leading: CircleAvatar(backgroundColor: isExpense ? Colors.red[50] : Colors.green[50], child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExpense ? Colors.redAccent : Colors.green)),
+                      title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
+                      trailing: Text('${isExpense ? '-' : '+'}${currencyFormat.format(tx.amount)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isExpense ? Colors.redAccent : Colors.green)),
+                    ),
                   );
                 },
               ),
@@ -109,6 +142,9 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
   }
 }
 
+// ==========================================
+// SCREEN 2: THE VAULT (Accordion Summary)
+// ==========================================
 class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
   @override
@@ -125,7 +161,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _tabController.addListener(() { setState(() {}); }); 
+    _tabController.addListener(() => setState(() {}));
     _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
     _expandAnimation = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
   }
@@ -138,10 +174,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   }
 
   void _toggleDial() {
-    setState(() {
-      _isDialOpen = !_isDialOpen;
-      _isDialOpen ? _animController.forward() : _animController.reverse();
-    });
+    setState(() { _isDialOpen = !_isDialOpen; _isDialOpen ? _animController.forward() : _animController.reverse(); });
   }
 
   void _openSheet(String type, String title) {
@@ -167,34 +200,53 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildAccordionView() {
+  Widget _buildAccordionView(String period) {
     final provider = Provider.of<TrackerProvider>(context);
+    final inSummary = provider.getSummaryByTypeAndCategory(period, 'In');
+    final outSummary = provider.getSummaryByTypeAndCategory(period, 'Out');
+
     return ListView(
       padding: const EdgeInsets.all(15),
       children: [
-        Container(
-          padding: const EdgeInsets.all(15),
-          margin: const EdgeInsets.only(bottom: 15),
-          decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
-          child: Column(
-            children: [
-              const Text('Total Assets (စုစုပေါင်း ပိုင်ဆိုင်မှု)', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 5),
-              Text('${provider.formatLakh(provider.totalAssets)} Ks', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-            ],
-          ),
-        ),
+        _buildAssetBox(provider),
         ExpansionTile(
-          title: const Text("Total In (ဝင်ငွေစုစုပေါင်း)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+          title: Text("Total In (${provider.formatLakh(provider.getPeriodTotal(period, 'In'))})", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
           leading: const Icon(Icons.arrow_downward, color: Colors.green),
-          children: const [ListTile(title: Text('Data Loading...'))],
+          children: inSummary.entries.map((e) => ListTile(
+            title: Text(e.key),
+            trailing: Text('+${provider.formatLakh(e.value)}', style: const TextStyle(color: Colors.green)),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LedgerPage(filterCategory: e.key))),
+          )).toList(),
         ),
         ExpansionTile(
-          title: const Text("Total Out (ထွက်ငွေစုစုပေါင်း)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+          title: Text("Total Out (${provider.formatLakh(provider.getPeriodTotal(period, 'Out'))})", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
           leading: const Icon(Icons.arrow_upward, color: Colors.redAccent),
-          children: const [ListTile(title: Text('Data Loading...'))],
+          children: outSummary.entries.map((e) => ListTile(
+            title: Text(e.key),
+            trailing: Text('-${provider.formatLakh(e.value)}', style: const TextStyle(color: Colors.redAccent)),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => LedgerPage(filterCategory: e.key))),
+          )).toList(),
         ),
       ],
+    );
+  }
+
+  Widget _buildAssetBox(TrackerProvider provider) {
+    return Container(
+      padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 15),
+      decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+      child: Column(
+        children: [
+          const Text('Total Assets (စုစုပေါင်း ပိုင်ဆိုင်မှု)', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 5),
+          Text('${provider.formatLakh(provider.totalAssets)} Ks', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+          const Divider(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: provider.wallets.map((w) => Column(children: [Text(w.name, style: const TextStyle(fontSize: 12, color: Colors.grey)), Text(provider.formatLakh(w.amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))])).toList(),
+          )
+        ],
+      ),
     );
   }
 
@@ -203,8 +255,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     return Scaffold(
       appBar: AppBar(
         title: const Text('The Vault', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26)),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: Colors.transparent, elevation: 0,
         bottom: TabBar(
           controller: _tabController, isScrollable: true, labelColor: Colors.blueAccent, unselectedLabelColor: Colors.grey, indicatorColor: Colors.blueAccent,
           tabs: const [Tab(text: 'Monthly'), Tab(text: 'Yearly'), Tab(text: 'Overview'), Tab(text: 'More')],
@@ -212,13 +263,12 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
       ),
       body: Stack(
         children: [
-          TabBarView(controller: _tabController, children: [_buildAccordionView(), _buildAccordionView(), _buildAccordionView(), const SettingsView()]),
+          TabBarView(controller: _tabController, children: [_buildAccordionView('Monthly'), _buildAccordionView('Yearly'), _buildAccordionView('Overview'), const SettingsView()]),
           if (_isDialOpen) GestureDetector(onTap: _toggleDial, child: Container(color: Colors.black.withOpacity(0.3))),
         ],
       ),
       floatingActionButton: _tabController.index == 3 ? null : Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisAlignment: MainAxisAlignment.end, crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           SizeTransition(
             sizeFactor: _expandAnimation,
@@ -242,6 +292,61 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   }
 }
 
+// ==========================================
+// SCREEN 3: LEDGER PAGE (Detailed History)
+// ==========================================
+class LedgerPage extends StatelessWidget {
+  final String filterCategory;
+  const LedgerPage({super.key, required this.filterCategory});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = Provider.of<TrackerProvider>(context);
+    final currencyFormat = NumberFormat('#,###');
+    final filteredList = provider.transactions.where((tx) {
+      final cat = provider.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0, type: ''));
+      return cat.name == filterCategory;
+    }).toList();
+
+    double total = filteredList.fold(0.0, (sum, item) => sum + item.amount);
+
+    return Scaffold(
+      appBar: AppBar(title: Text('$filterCategory Ledger'), backgroundColor: Colors.transparent),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(25), width: double.infinity, color: Colors.white,
+            child: Column(children: [const Text('Total for this Label', style: TextStyle(color: Colors.grey)), Text('${provider.formatLakh(total)} Ks', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blueAccent))]),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: filteredList.length,
+              itemBuilder: (context, index) {
+                final tx = filteredList[index];
+                return Dismissible(
+                  key: Key(tx.id.toString()),
+                  direction: DismissDirection.endToStart,
+                  background: Container(color: Colors.redAccent, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete, color: Colors.white)),
+                  onDismissed: (_) => provider.deleteTransaction(tx.id!),
+                  child: ListTile(
+                    leading: CircleAvatar(child: Text(DateFormat('dd').format(DateTime.parse(tx.dateTimestamp)))),
+                    title: Text(DateFormat('dd MMM yyyy').format(DateTime.parse(tx.dateTimestamp))),
+                    subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
+                    trailing: Text(currencyFormat.format(tx.amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// SETTINGS VIEW (Google Drive Backup)
+// ==========================================
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
   @override
@@ -252,29 +357,13 @@ class _SettingsViewState extends State<SettingsView> {
   final GoogleDriveService _driveService = GoogleDriveService();
   bool _isSyncing = false;
 
-  void _backupData(TrackerProvider provider) async {
-    setState(() => _isSyncing = true);
-    bool success = await _driveService.backupDatabase();
-    setState(() => _isSyncing = false);
-    if (success) { provider.updateSyncTime(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backup Successful! 🎉'), backgroundColor: Colors.green)); } 
-    else { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Backup Failed.'), backgroundColor: Colors.redAccent)); }
-  }
-
-  void _restoreData(TrackerProvider provider) async {
-    setState(() => _isSyncing = true);
-    bool success = await _driveService.restoreDatabase();
-    setState(() => _isSyncing = false);
-    if (success) { provider.loadAllData(); if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Restore Successful! 🎉'), backgroundColor: Colors.blueAccent)); } 
-    else { if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Restore Failed.'), backgroundColor: Colors.redAccent)); }
-  }
-
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TrackerProvider>(context);
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]), child: SwitchListTile(title: const Text('Lakh Format', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: const Text('1,000,000 Ks ကို 10.0 Lakh ဟု ပြပါမည်'), value: provider.isLakhEnabled, activeColor: Colors.blueAccent, onChanged: (val) => provider.toggleLakh(val))),
+        Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]), child: SwitchListTile(title: const Text('Lakh Format', style: TextStyle(fontWeight: FontWeight.bold)), value: provider.isLakhEnabled, activeColor: Colors.blueAccent, onChanged: (val) => provider.toggleLakh(val))),
         const SizedBox(height: 30),
         const Text('Cloud Backup', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 10),
@@ -282,9 +371,9 @@ class _SettingsViewState extends State<SettingsView> {
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]),
           child: Column(
             children: [
-              ListTile(leading: const Icon(Icons.cloud_upload, color: Colors.blueAccent, size: 30), title: const Text('Backup to Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('Last synced: ${provider.lastSyncTime}'), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: _isSyncing ? null : () => _backupData(provider)),
+              ListTile(leading: const Icon(Icons.cloud_upload, color: Colors.blueAccent), title: const Text('Backup to Google Drive'), subtitle: Text('Last synced: ${provider.lastSyncTime}'), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.backupDatabase(); provider.updateSyncTime(); setState(() => _isSyncing = false); }),
               const Divider(height: 1),
-              ListTile(leading: const Icon(Icons.cloud_download, color: Colors.green, size: 30), title: const Text('Restore from Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: _isSyncing ? null : () => _restoreData(provider)),
+              ListTile(leading: const Icon(Icons.cloud_download, color: Colors.green), title: const Text('Restore from Google Drive'), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.restoreDatabase(); provider.loadAllData(); setState(() => _isSyncing = false); }),
             ],
           ),
         ),
