@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart'; // ကော်မာ (,) ခံရန်အတွက်
+import 'package:intl/intl.dart';
 import '../models/app_models.dart';
 import '../database/db_helper.dart';
 
@@ -8,7 +8,6 @@ class TrackerProvider extends ChangeNotifier {
   List<AppWallet> wallets = [];
   List<AppCategory> categories = [];
   List<AppTransaction> transactions = [];
-  
   bool isLoading = true;
   bool isLakhEnabled = true;
   String lastSyncTime = "Never";
@@ -19,42 +18,7 @@ class TrackerProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     isLakhEnabled = prefs.getBool('isLakhEnabled') ?? true;
     lastSyncTime = prefs.getString('lastSyncTime') ?? "Never";
-
     await loadAllData();
-    
-    if (wallets.isEmpty) {
-      await addWallet(AppWallet(name: 'Balance', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
-      await addWallet(AppWallet(name: 'ဘဏ်စာရင်း', type: 'Bank', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
-      await addWallet(AppWallet(name: 'ယောကျ်ားစာရင်း', type: 'Person', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
-    }
-    
-    if (categories.isEmpty) {
-      final db = await DatabaseHelper.instance.database;
-      await db.insert('categories', {'name': 'Foods & Drinks', 'icon_data': 0xe25a, 'type': 'Expense'});
-      await db.insert('categories', {'name': 'Shopping', 'icon_data': 0xe5fc, 'type': 'Expense'});
-      await db.insert('categories', {'name': 'Salary', 'icon_data': 0xe3f8, 'type': 'Income'});
-      await db.insert('categories', {'name': 'KPay', 'icon_data': 0xe040, 'type': 'BankDeposit'});
-      await db.insert('categories', {'name': 'AYA', 'icon_data': 0xe040, 'type': 'BankDeposit'});
-      await db.insert('categories', {'name': 'ကိုကြီး', 'icon_data': 0xe314, 'type': 'HomeTransfer'});
-      await db.insert('categories', {'name': 'အိမ်', 'icon_data': 0xe314, 'type': 'HomeTransfer'});
-      await db.insert('categories', {'name': 'လွှဲငွေ', 'icon_data': 0xe491, 'type': 'HusbandDeposit'});
-    }
-    await loadAllData();
-  }
-
-  void toggleLakh(bool value) async {
-    isLakhEnabled = value;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLakhEnabled', value);
-    notifyListeners();
-  }
-
-  void updateSyncTime() async {
-    final now = DateTime.now();
-    lastSyncTime = "${now.day}-${now.month}-${now.year} ${now.hour}:${now.minute}";
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('lastSyncTime', lastSyncTime);
-    notifyListeners();
   }
 
   Future<void> loadAllData() async {
@@ -66,86 +30,76 @@ class TrackerProvider extends ChangeNotifier {
     isLoading = false; notifyListeners();
   }
 
-  Future<void> addWallet(AppWallet wallet) async {
-    await (await DatabaseHelper.instance.database).insert('wallets', wallet.toMap());
-    await loadAllData();
-  }
-
-  Future<void> addNewCategory(String name, String type) async {
+  // --- CRUD Functions ---
+  Future<int> addTransaction({required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
     final db = await DatabaseHelper.instance.database;
-    await db.insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type});
-    await loadAllData();
-  }
-
-  Future<int> addTransaction({
-    required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString,
-  }) async {
-    final db = await DatabaseHelper.instance.database;
-    AppWallet srcWallet = wallets.firstWhere((w) => w.id == sourceWalletId);
     int? destWalletId;
-
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
-      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
-      AppWallet dest = wallets.firstWhere((w) => w.id == destWalletId);
-      await db.update('wallets', {'amount': dest.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
-    } 
-    else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount);
+    } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
-      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
-      AppWallet dest = wallets.firstWhere((w) => w.id == destWalletId);
-      await db.update('wallets', {'amount': dest.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
-    } 
-    else if (type == 'Income') {
-      await db.update('wallets', {'amount': srcWallet.amount + amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
-    } 
-    else if (type == 'Expense' || type == 'HomeTransfer') {
-      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount);
+    } else if (type == 'Income') {
+      _adjustWallet(sourceWalletId, amount);
+    } else if (type == 'Expense' || type == 'HomeTransfer') {
+      _adjustWallet(sourceWalletId, -amount);
     }
-
     int id = await db.insert('transactions', AppTransaction(amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap());
-    await loadAllData();
-    return id;
+    await loadAllData(); return id;
   }
 
   Future<void> deleteTransaction(int txId) async {
-    final db = await DatabaseHelper.instance.database;
-    final txMap = await db.query('transactions', where: 'id = ?', whereArgs: [txId]);
-    if (txMap.isEmpty) return;
-    AppTransaction tx = AppTransaction.fromMap(txMap.first);
-    AppWallet srcWallet = wallets.firstWhere((w) => w.id == tx.sourceWalletId);
-    
+    final tx = transactions.firstWhere((t) => t.id == txId);
     if (tx.type == 'BankDeposit' || tx.type == 'HusbandDeposit' || tx.type == 'IncomeFromBank' || tx.type == 'IncomeFromHusband') {
-      AppWallet dest = wallets.firstWhere((w) => w.id == tx.destinationWalletId);
-      await db.update('wallets', {'amount': srcWallet.amount + tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
-      await db.update('wallets', {'amount': dest.amount - tx.amount}, where: 'id = ?', whereArgs: [tx.destinationWalletId]);
-    } 
-    else if (tx.type == 'Income') {
-      await db.update('wallets', {'amount': srcWallet.amount - tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
-    } 
-    else if (tx.type == 'Expense' || tx.type == 'HomeTransfer') {
-      await db.update('wallets', {'amount': srcWallet.amount + tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
+      _adjustWallet(tx.sourceWalletId, tx.amount); _adjustWallet(tx.destinationWalletId!, -tx.amount);
+    } else if (tx.type == 'Income') {
+      _adjustWallet(tx.sourceWalletId, -tx.amount);
+    } else {
+      _adjustWallet(tx.sourceWalletId, tx.amount);
     }
-    await db.delete('transactions', where: 'id = ?', whereArgs: [txId]);
+    await (await DatabaseHelper.instance.database).delete('transactions', where: 'id = ?', whereArgs: [txId]);
     await loadAllData();
   }
 
-  // ကော်မာ ပါအောင် ပြင်ဆင်ထားသော formatLakh
-  String formatLakh(double amount) {
-    if (isLakhEnabled && amount.abs() >= 100000) return "${(amount / 100000).toStringAsFixed(1)} Lakh"; 
-    return NumberFormat('#,###').format(amount);
+  void _adjustWallet(int id, double amount) async {
+    final db = await DatabaseHelper.instance.database;
+    final w = wallets.firstWhere((w) => w.id == id);
+    await db.update('wallets', {'amount': w.amount + amount}, where: 'id = ?', whereArgs: [id]);
   }
 
-  // ယခုလအတွက် ထွက်ငွေစုစုပေါင်းကို တွက်ပေးမည့် Function အသစ်
-  double get currentMonthExpense {
+  // --- Summary Logic for Accordion ---
+  Map<String, double> getSummaryByTypeAndCategory(String period, String typeGroup) {
     DateTime now = DateTime.now();
-    return transactions.where((tx) {
-      DateTime txDate = DateTime.parse(tx.dateTimestamp);
-      // Expense နဲ့ အိမ်လွှဲငွေ ကိုသာ အမှန်တကယ် ထွက်ငွေအဖြစ် သတ်မှတ်ပါမည်
-      return txDate.year == now.year && txDate.month == now.month && (tx.type == 'Expense' || tx.type == 'HomeTransfer');
-    }).fold(0.0, (sum, tx) => sum + tx.amount);
+    var filtered = transactions.where((tx) {
+      DateTime date = DateTime.parse(tx.dateTimestamp);
+      bool timeMatch = period == 'Monthly' ? (date.year == now.year && date.month == now.month) : (date.year == now.year);
+      bool typeMatch = false;
+      if (typeGroup == 'In') typeMatch = ['Income', 'IncomeFromBank', 'IncomeFromHusband'].contains(tx.type);
+      if (typeGroup == 'Out') typeMatch = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
+      return timeMatch && typeMatch;
+    });
+
+    Map<String, double> summary = {};
+    for (var tx in filtered) {
+      String catName = categories.firstWhere((c) => c.id == tx.categoryId).name;
+      summary[catName] = (summary[catName] ?? 0.0) + tx.amount;
+    }
+    return summary;
+  }
+
+  String formatLakh(double amount) {
+    if (isLakhEnabled && amount.abs() >= 100000) return "${(amount / 100000).toStringAsFixed(1)} Lakh";
+    return NumberFormat('#,###').format(amount);
   }
 
   double get totalAssets => wallets.fold(0.0, (sum, item) => sum + item.amount);
   double get totalBalance => wallets.where((w) => w.type == 'Balance').fold(0.0, (sum, item) => sum + item.amount);
+  
+  double getPeriodTotal(String period, String typeGroup) {
+    return getSummaryByTypeAndCategory(period, typeGroup).values.fold(0.0, (a, b) => a + b);
+  }
+
+  void toggleLakh(bool val) async { isLakhEnabled = val; (await SharedPreferences.getInstance()).setBool('isLakhEnabled', val); notifyListeners(); }
+  void updateSyncTime() async { lastSyncTime = DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now()); (await SharedPreferences.getInstance()).setString('lastSyncTime', lastSyncTime); notifyListeners(); }
 }
