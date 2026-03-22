@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/tracker_provider.dart';
 import 'widgets/add_tx_sheet.dart';
-import 'models/app_models.dart'; // Category နာမည်တွေ ပြန်ရှာဖို့ ထည့်ထားပါတယ်
+import 'models/app_models.dart';
 
 void main() {
   runApp(
@@ -78,6 +78,9 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
+// ==========================================
+// SCREEN 1: THE DAILY HUB (Main Hub)
+// ==========================================
 class DailyHubScreen extends StatefulWidget {
   const DailyHubScreen({super.key});
 
@@ -86,20 +89,12 @@ class DailyHubScreen extends StatefulWidget {
 }
 
 class _DailyHubScreenState extends State<DailyHubScreen> {
-  // သိန်းဂဏန်း (Lakh) အပြည့်ပြမလား၊ အတိုပြမလား မှတ်မယ့်နေရာ
   bool _showFullBalance = false;
 
   void _toggleBalanceView() {
-    setState(() {
-      _showFullBalance = true;
-    });
-    // ၃ စက္ကန့်နေရင် ပြန်ပြောင်းပေးမယ်
+    setState(() { _showFullBalance = true; });
     Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() {
-          _showFullBalance = false;
-        });
-      }
+      if (mounted) setState(() { _showFullBalance = false; });
     });
   }
 
@@ -109,7 +104,7 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('The Daily Hub', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('The Daily Hub', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26)),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
@@ -120,22 +115,19 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
             children: [
               const SizedBox(height: 20),
               const Text('Total Balance', style: TextStyle(color: Colors.grey, fontSize: 16)),
-              
-              // Balance ကို သိန်းဂဏန်းနဲ့ ပြမယ့် နေရာ (နှိပ်လို့ရပါတယ်)
               GestureDetector(
                 onTap: _toggleBalanceView,
                 child: Text(
                   _showFullBalance 
-                      ? '${provider.totalBalance.toStringAsFixed(0)} Ks' // ဂဏန်းအပြည့်ပြမယ်
-                      : '${provider.formatLakh(provider.totalBalance)} Ks', // Lakh နဲ့ပြမယ်
+                      ? '${provider.totalBalance.toStringAsFixed(0)} Ks' 
+                      : '${provider.formatLakh(provider.totalBalance)} Ks',
                   style: TextStyle(
                     fontSize: 40, 
                     fontWeight: FontWeight.bold, 
-                    color: provider.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent // အနှုတ်ဆို အနီရောင်ပြမယ်
+                    color: provider.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent
                   ),
                 ),
               ),
-              
               const SizedBox(height: 30),
               Expanded(
                 child: Container(
@@ -144,38 +136,25 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5)),
-                    ],
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5))],
                   ),
                   child: provider.transactions.isEmpty 
                     ? const Center(child: Text('No Transactions Yet', style: TextStyle(color: Colors.grey)))
-                    // မှတ်တမ်းတွေ ရှိလာရင် List လေးနဲ့ ကတ်ပြားလေးတွေ ပြမယ်
                     : ListView.builder(
                         itemCount: provider.transactions.length,
                         itemBuilder: (context, index) {
                           final tx = provider.transactions[index];
-                          // Category နာမည်ကို ID ကနေ လှမ်းရှာမယ်
-                          final category = provider.categories.firstWhere(
-                            (c) => c.id == tx.categoryId, 
-                            orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense')
-                          );
-                          
+                          final category = provider.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
                           return ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: tx.type == 'E' ? Colors.red[100] : Colors.green[100],
-                              child: Icon(IconData(category.iconData, fontFamily: 'MaterialIcons'), 
-                                          color: tx.type == 'E' ? Colors.redAccent : Colors.green),
+                              backgroundColor: tx.type == 'E' ? Colors.red[50] : Colors.green[50],
+                              child: Icon(IconData(category.iconData, fontFamily: 'MaterialIcons'), color: tx.type == 'E' ? Colors.redAccent : Colors.green),
                             ),
                             title: Text(category.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                             subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
                             trailing: Text(
                               '${tx.type == 'E' ? '-' : '+'}${tx.amount.toStringAsFixed(0)}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold, 
-                                fontSize: 16,
-                                color: tx.type == 'E' ? Colors.redAccent : Colors.green,
-                              ),
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: tx.type == 'E' ? Colors.redAccent : Colors.green),
                             ),
                           );
                         },
@@ -186,40 +165,182 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
           ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
+          // Main Hub ကနေ Expense Form သီးသန့်ပဲ ခေါ်ပါမယ်
           showModalBottomSheet(
             context: context,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
             builder: (context) => Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
-              ),
-              child: const AddTxSheet(),
+              decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))),
+              child: const AddTxSheet(txType: 'E', title: 'Add Expense (ထွက်ငွေ)'),
             ),
           );
         },
-        backgroundColor: Colors.blueAccent,
+        backgroundColor: Colors.redAccent, // Expense အတွက် အနီရောင် သုံးထားပါတယ်
         elevation: 4,
-        child: const Icon(Icons.add, color: Colors.white, size: 28),
+        child: const Icon(Icons.remove, color: Colors.white, size: 28), // အနှုတ် လက္ခဏာ
       ),
     );
   }
 }
 
-class VaultScreen extends StatelessWidget {
+// ==========================================
+// SCREEN 2: THE VAULT (Accordion & Speed Dial)
+// ==========================================
+class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
+
+  @override
+  State<VaultScreen> createState() => _VaultScreenState();
+}
+
+class _VaultScreenState extends State<VaultScreen> with SingleTickerProviderStateMixin {
+  bool _isDialOpen = false;
+  late AnimationController _animController;
+  late Animation<double> _expandAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
+    _expandAnimation = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  void _toggleDial() {
+    setState(() {
+      _isDialOpen = !_isDialOpen;
+      if (_isDialOpen) {
+        _animController.forward();
+      } else {
+        _animController.reverse();
+      }
+    });
+  }
+
+  void _openSheet(String type, String title) {
+    _toggleDial(); // မီနူးကို အရင်ပိတ်မယ်
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))),
+        child: AddTxSheet(txType: type, title: title),
+      ),
+    );
+  }
+
+  Widget _buildDialButton(String title, IconData icon, Color color, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]),
+            child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+          ),
+          const SizedBox(width: 15),
+          FloatingActionButton(
+            heroTag: title, // Hero tag မတူအောင် ခွဲပေးရပါတယ်
+            mini: true,
+            backgroundColor: color,
+            onPressed: onTap,
+            child: Icon(icon, color: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('The Vault', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('The Vault', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(50),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: ['Monthly', 'Yearly', 'Overview', 'More']
+                .map((t) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                      child: Text(t, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                    ))
+                .toList(),
+          ),
+        ),
       ),
-      body: const Center(
-        child: Text('Vault Data Here'),
+      body: Stack(
+        children: [
+          // Accordion UI List
+          ListView(
+            padding: const EdgeInsets.all(15),
+            children: [
+              ExpansionTile(
+                title: const Text("Total In (ဝင်ငွေစုစုပေါင်း)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                leading: const Icon(Icons.arrow_downward, color: Colors.green),
+                children: [
+                  ListTile(title: const Text('Salary'), trailing: const Text('+100,000', style: TextStyle(color: Colors.green))),
+                ],
+              ),
+              ExpansionTile(
+                title: const Text("Total Out (ထွက်ငွေစုစုပေါင်း)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                leading: const Icon(Icons.arrow_upward, color: Colors.redAccent),
+                children: [
+                  ListTile(title: const Text('Foods & Drinks'), trailing: const Text('-15,000', style: TextStyle(color: Colors.redAccent))),
+                  ListTile(title: const Text('Shopping'), trailing: const Text('-45,000', style: TextStyle(color: Colors.redAccent))),
+                ],
+              ),
+            ],
+          ),
+
+          // Speed Dial Background Overlay (မှိန်သွားမယ့် အမည်းရောင်နောက်ခံ)
+          if (_isDialOpen)
+            GestureDetector(
+              onTap: _toggleDial,
+              child: Container(color: Colors.black.withOpacity(0.3)),
+            ),
+        ],
+      ),
+      // Custom Animated Speed Dial ခလုတ်
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          SizeTransition(
+            sizeFactor: _expandAnimation,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildDialButton('ယောက်ျားအပ်ငွေ', Icons.person, Colors.purple, () => _openSheet('In', 'ယောက်ျားအပ်ငွေ')),
+                _buildDialButton('ဘဏ်အပ်ငွေ', Icons.account_balance, Colors.orange, () => _openSheet('In', 'ဘဏ်အပ်ငွေ')),
+                _buildDialButton('အိမ်လွှဲငွေ', Icons.home, Colors.teal, () => _openSheet('In', 'အိမ်လွှဲငွေ')),
+                _buildDialButton('ဝင်ငွေ', Icons.attach_money, Colors.green, () => _openSheet('In', 'Income (ဝင်ငွေ)')),
+              ],
+            ),
+          ),
+          FloatingActionButton(
+            heroTag: 'MainVaultFab',
+            onPressed: _toggleDial,
+            backgroundColor: _isDialOpen ? Colors.grey : Colors.blueAccent,
+            child: AnimatedRotation(
+              turns: _isDialOpen ? 0.125 : 0, // 0.125 ဆိုတာ 45 ဒီဂရီ လှည့်တာပါ (အပေါင်း ကနေ ကြက်ခြေခတ် ဖြစ်သွားမယ်)
+              duration: const Duration(milliseconds: 250),
+              child: const Icon(Icons.add, color: Colors.white, size: 28),
+            ),
+          ),
+        ],
       ),
     );
   }
