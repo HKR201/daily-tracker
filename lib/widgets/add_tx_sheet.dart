@@ -25,8 +25,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
   DateTime _selectedDate = DateTime.now();
   
   AppWallet? _selectedSourceWallet;
-  
-  // Income တွင်သာ သုံးမည့် "ပြင်ပရင်းမြစ်" Fake Wallet
   final AppWallet _externalWallet = AppWallet(id: -1, name: 'ပြင်ပရင်းမြစ် (External)', type: 'External', amount: 0, lastUpdated: '');
 
   @override
@@ -46,10 +44,31 @@ class _AddTxSheetState extends State<AddTxSheet> {
 
   void _evaluateMath(String input) {
     if (input.isEmpty) { setState(() { _calcResult = ''; _isError = false; }); return; }
+    
+    // ၁။ တွက်ချက်ဖို့အတွက် ကော်မာတွေကို အရင်ဖြုတ်ပါမည်
+    String raw = input.replaceAll(',', '');
+    
+    // ၂။ ရိုက်ထည့်လိုက်တဲ့ ဂဏန်းတွေကို ကော်မာ (,) ပြန်ခံပေးပါမည်
+    String formattedInput = raw.replaceAllMapped(RegExp(r'\d+'), (match) {
+      return NumberFormat('#,###').format(int.parse(match.group(0)!));
+    });
+
+    // ၃။ ကော်မာခံထားတဲ့ စာသားကို TextField ထဲ အလိုအလျောက် ပြန်ထည့်ပါမည်
+    if (input != formattedInput) {
+      _amountCtrl.value = TextEditingValue(
+        text: formattedInput,
+        selection: TextSelection.collapsed(offset: formattedInput.length),
+      );
+    }
+
     try {
-      String sanitized = input.replaceAll(RegExp(r'[^0-9\+\-\*\/\.]'), '').replaceAll(RegExp(r'\+\++'), '+').replaceAll(RegExp(r'\-\-+'), '-');
+      String sanitized = raw.replaceAll(RegExp(r'[^0-9\+\-\*\/\.]'), '').replaceAll(RegExp(r'\+\++'), '+').replaceAll(RegExp(r'\-\-+'), '-');
       double eval = Parser().parse(sanitized).evaluate(EvaluationType.REAL, ContextModel());
-      setState(() { _calcResult = eval == eval.toInt() ? eval.toInt().toString() : eval.toStringAsFixed(2); _isError = false; });
+      setState(() { 
+        // ၄။ အဖြေကိုလည်း ကော်မာခံပြီး ပြပါမည်
+        _calcResult = eval == eval.toInt() ? NumberFormat('#,###').format(eval.toInt()) : NumberFormat('#,###.##').format(eval); 
+        _isError = false; 
+      });
     } catch (e) {
       setState(() { _calcResult = 'Error'; _isError = true; });
     }
@@ -90,23 +109,25 @@ class _AddTxSheetState extends State<AddTxSheet> {
 
     final provider = Provider.of<TrackerProvider>(context, listen: false);
     
-    // Income Form မှ လာသော Logic များကို ခွဲထုတ်ခြင်း
+    // Save လုပ်မည့်အခါ ကော်မာတွေကို ပြန်ဖြုတ်ပြီးမှ သိမ်းပါမည်
+    double finalAmount = double.parse(_calcResult.replaceAll(',', ''));
+
     String finalTxType = widget.txType;
     int finalSourceId = _selectedSourceWallet!.id!;
 
     if (widget.txType == 'Income') {
       if (_selectedSourceWallet!.id == -1) {
-        finalTxType = 'Income'; // ပြင်ပဝင်ငွေ
+        finalTxType = 'Income'; 
         finalSourceId = provider.wallets.firstWhere((w) => w.type == 'Balance').id!;
       } else if (_selectedSourceWallet!.type == 'Bank') {
-        finalTxType = 'IncomeFromBank'; // ဘဏ်မှဝင်ငွေ
+        finalTxType = 'IncomeFromBank'; 
       } else if (_selectedSourceWallet!.type == 'Person') {
-        finalTxType = 'IncomeFromHusband'; // ယောကျ်ားမှဝင်ငွေ
+        finalTxType = 'IncomeFromHusband'; 
       }
     }
 
     int newTxId = await provider.addTransaction(
-      amount: double.parse(_calcResult), type: finalTxType,
+      amount: finalAmount, type: finalTxType,
       sourceWalletId: finalSourceId, categoryId: category.id!,
       note: _noteCtrl.text, dateString: _selectedDate.toIso8601String(),
     );
@@ -114,7 +135,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
     if (!mounted) return;
     Navigator.pop(context);
     
-    // SnackBar ပြဿနာဖြေရှင်းခြင်း (FAB အပေါ်မှာပေါ်မယ်၊ ၃ စက္ကန့်နဲ့ပျောက်မယ်)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${widget.title} Saved!'), 
@@ -133,7 +153,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
     final typeCategories = provider.categories.where((c) => c.type == widget.txType).toList();
     final color = (widget.txType == 'Expense' || widget.txType == 'HomeTransfer') ? Colors.redAccent : Colors.blueAccent;
 
-    // Dropdown တွင်ပေါ်မည့် အိတ်ကပ်များ
     List<AppWallet> availableWallets = [];
     if (widget.txType == 'Income') {
       availableWallets = [_externalWallet, ...provider.wallets.where((w) => w.type == 'Bank' || w.type == 'Person')];
