@@ -66,7 +66,7 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
       body: provider.isLoading ? const Center(child: CircularProgressIndicator()) : Column(
         children: [
           const SizedBox(height: 20),
-          const Text('Total Balance (လက်ကျန်ငွေ)', style: TextStyle(color: Colors.grey, fontSize: 16)),
+          const Text('Current Balance (လက်ကျန်ငွေ)', style: TextStyle(color: Colors.grey, fontSize: 16)),
           GestureDetector(
             onTap: _toggleBalanceView,
             child: Text(_showFullBalance ? '${provider.totalBalance.toStringAsFixed(0)} Ks' : '${provider.formatLakh(provider.totalBalance)} Ks',
@@ -81,12 +81,15 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                 itemCount: provider.transactions.length,
                 itemBuilder: (context, index) {
                   final tx = provider.transactions[index];
+                  // Balance ထဲကနေ ငွေထွက်သွားသော အကြောင်းအရာများ (အနှုတ်ပြမည်)
+                  bool isExpense = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
+                  
                   final cat = provider.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
                   return ListTile(
-                    leading: CircleAvatar(backgroundColor: (tx.type == 'Expense' || tx.type == 'HomeTransfer') ? Colors.red[50] : Colors.blue[50], child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: (tx.type == 'Expense' || tx.type == 'HomeTransfer') ? Colors.redAccent : Colors.blueAccent)),
+                    leading: CircleAvatar(backgroundColor: isExpense ? Colors.red[50] : Colors.green[50], child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExpense ? Colors.redAccent : Colors.green)),
                     title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
-                    trailing: Text('${(tx.type == 'Expense' || tx.type == 'HomeTransfer') ? '-' : '+'}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: (tx.type == 'Expense' || tx.type == 'HomeTransfer') ? Colors.redAccent : Colors.green)),
+                    trailing: Text('${isExpense ? '-' : '+'}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isExpense ? Colors.redAccent : Colors.green)),
                   );
                 },
               ),
@@ -145,21 +148,39 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   Widget _buildDialButton(String title, IconData icon, Color color, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]), child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color))),
-          const SizedBox(width: 15),
-          FloatingActionButton(heroTag: title, mini: true, backgroundColor: color, onPressed: onTap, child: Icon(icon, color: Colors.white)),
-        ],
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque, // တစ်တန်းလုံး ဘယ်နှိပ်နှိပ် အလုပ်လုပ်စေရန်
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)]), child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: color))),
+            const SizedBox(width: 15),
+            FloatingActionButton(heroTag: title, mini: true, backgroundColor: color, onPressed: onTap, child: Icon(icon, color: Colors.white)),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildAccordionView() {
+    final provider = Provider.of<TrackerProvider>(context);
     return ListView(
       padding: const EdgeInsets.all(15),
       children: [
+        // Total Assets Banner
+        Container(
+          padding: const EdgeInsets.all(15),
+          margin: const EdgeInsets.only(bottom: 15),
+          decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(15)),
+          child: Column(
+            children: [
+              const Text('Total Assets (စုစုပေါင်း ပိုင်ဆိုင်မှု)', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 5),
+              Text('${provider.formatLakh(provider.totalAssets)} Ks', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+            ],
+          ),
+        ),
         ExpansionTile(
           title: const Text("Total In (ဝင်ငွေစုစုပေါင်း)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
           leading: const Icon(Icons.arrow_downward, color: Colors.green),
@@ -201,7 +222,6 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Form အမည်များကို Unique ဖြစ်အောင် လှမ်းချိတ်လိုက်ပါပြီ
                 _buildDialButton('ယောကျ်ားအပ်ငွေ', Icons.person, Colors.purple, () => _openSheet('HusbandDeposit', 'ယောကျ်ားအပ်ငွေ')),
                 _buildDialButton('ဘဏ်အပ်ငွေ', Icons.account_balance, Colors.orange, () => _openSheet('BankDeposit', 'ဘဏ်အပ်ငွေ')),
                 _buildDialButton('အိမ်လွှဲငွေ', Icons.home, Colors.teal, () => _openSheet('HomeTransfer', 'အိမ်လွှဲငွေ')),
