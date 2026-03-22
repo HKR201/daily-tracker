@@ -33,7 +33,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
       final provider = Provider.of<TrackerProvider>(context, listen: false);
       if (provider.wallets.isNotEmpty) {
         setState(() {
-          // Form ဖွင့်တာနဲ့ "Balance" ကို အရင်ဆုံး Default ရွေးထားပေးပါမယ်
           _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Balance');
         });
       }
@@ -75,7 +74,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
     }
   }
 
-  // Label အသစ်ထည့်မည့် Popup ကို ခေါ်မည့် Function
   void _showAddLabelDialog() {
     String newLabel = '';
     showDialog(
@@ -96,7 +94,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
             style: ElevatedButton.styleFrom(backgroundColor: widget.txType == 'E' ? Colors.redAccent : Colors.blueAccent),
             onPressed: () {
               if (newLabel.trim().isNotEmpty) {
-                // Provider ကိုလှမ်းပြီး Database ထဲ Label အသစ် ထည့်ခိုင်းပါမယ်
                 Provider.of<TrackerProvider>(context, listen: false).addNewCategory(
                   newLabel.trim(), 
                   widget.txType == 'E' ? 'Expense' : 'Income'
@@ -173,7 +170,8 @@ class _AddTxSheetState extends State<AddTxSheet> {
                   children: [
                     const Icon(Icons.chevron_left, color: Colors.grey),
                     Text(DateFormat('dd-MMM-yyyy').format(_selectedDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Icon(Icons.calendar_today, color: color),
+                    // ဒီနေရာက Error တက်သွားတဲ့ const ကို ဖြုတ်လိုက်ပါပြီ
+                    Icon(Icons.calendar_today, color: color), 
                   ],
                 ),
               ),
@@ -196,7 +194,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
             ),
             const SizedBox(height: 15),
 
-            // Dropdown (From)
             DropdownButtonFormField<AppWallet>(
               decoration: InputDecoration(
                 labelText: 'From',
@@ -225,7 +222,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
             const Text('Tap a category to save (Zero-Click)', style: TextStyle(color: Colors.grey, fontSize: 14)),
             const SizedBox(height: 10),
             
-            // Variable Labels (Categories) နှင့် + Add ခလုတ်
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -241,13 +237,12 @@ class _AddTxSheetState extends State<AddTxSheet> {
                   );
                 }),
                 
-                // + Add ခလုတ် (အမြဲတမ်း နောက်ဆုံးမှာ ပေါ်နေပါမည်)
                 ActionChip(
                   elevation: 2,
                   backgroundColor: Colors.grey[200],
                   side: BorderSide.none,
                   label: Text('+ Add Label', style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.bold)),
-                  onPressed: _showAddLabelDialog, // နှိပ်လိုက်လျှင် Popup ပေါ်လာပါမည်
+                  onPressed: _showAddLabelDialog,
                 ),
               ],
             ),
