@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/tracker_provider.dart';
+import 'widgets/add_tx_sheet.dart'; // အသစ်ထည့်ထားသော Form ဖိုင်ကို လှမ်းချိတ်ပါပြီ
 
 void main() {
   runApp(
-    // App တစ်ခုလုံးကို Provider နဲ့ ပတ်ပေးလိုက်ပါပြီ
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => TrackerProvider()),
@@ -23,7 +23,6 @@ class DailyTrackerApp extends StatelessWidget {
       title: 'Daily Tracker',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // Minimalist ဖြစ်အောင် အရောင်ကို ရှင်းရှင်းလင်းလင်း ပြင်ထားပါတယ်
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blueAccent,
           background: const Color(0xFFF5F7FA), // ခဲပြာရောင်ဖျော့ဖျော့ နောက်ခံ
@@ -61,7 +60,6 @@ class _MainScreenState extends State<MainScreen> {
             _currentIndex = index;
           });
         },
-        // Modern Look ဖြစ်တဲ့ NavigationBar ကို သုံးထားပါတယ်
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -84,7 +82,6 @@ class DailyHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Provider ထဲက Data တွေကို လှမ်းယူပါပြီ
     final provider = Provider.of<TrackerProvider>(context);
 
     return Scaffold(
@@ -100,7 +97,7 @@ class DailyHubScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 20),
               const Text('Total Balance', style: TextStyle(color: Colors.grey, fontSize: 16)),
-              // Database ကလာတဲ့ အစစ်အမှန် Balance ကို ပြပါမယ်
+              // Database ကလာတဲ့ အစစ်အမှန် Balance (အဝင်အထွက် ပြောင်းလဲမှုကို ချက်ချင်းပြပါမယ်)
               Text(
                 '${provider.totalBalance.toStringAsFixed(0)} Ks', 
                 style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blueAccent)
@@ -118,7 +115,7 @@ class DailyHubScreen extends StatelessWidget {
                     ],
                   ),
                   child: const Center(
-                    child: Text('Transactions will appear here', style: TextStyle(color: Colors.grey)),
+                    child: Text('Transactions History Here', style: TextStyle(color: Colors.grey)),
                   ),
                 ),
               ),
@@ -126,7 +123,19 @@ class DailyHubScreen extends StatelessWidget {
           ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // နောက်အပိုင်းမှာ ဒီနေရာကနေ Transaction Form ခေါ်ပါမယ်
+          // အပေါင်းခလုတ်နှိပ်ရင် အောက်ကနေ Form လေး လျှောတက်လာပါမယ်
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true, // Keyboard တက်လာရင် Form ကို အပေါ်တွန်းတင်ပေးမည့်စနစ်
+            backgroundColor: Colors.transparent,
+            builder: (context) => Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
+              ),
+              child: const AddTxSheet(), // ခုနက ကျွန်တော်တို့ ဆောက်ခဲ့တဲ့ Form ဖိုင်လေးပါ
+            ),
+          );
         },
         backgroundColor: Colors.blueAccent,
         elevation: 4,
