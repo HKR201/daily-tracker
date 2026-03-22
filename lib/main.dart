@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'providers/tracker_provider.dart';
 
 void main() {
-  runApp(const DailyTrackerApp());
+  runApp(
+    // App တစ်ခုလုံးကို Provider နဲ့ ပတ်ပေးလိုက်ပါပြီ
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => TrackerProvider()),
+      ],
+      child: const DailyTrackerApp(),
+    ),
+  );
 }
 
 class DailyTrackerApp extends StatelessWidget {
@@ -11,21 +21,15 @@ class DailyTrackerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Daily Tracker',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
+        // Minimalist ဖြစ်အောင် အရောင်ကို ရှင်းရှင်းလင်းလင်း ပြင်ထားပါတယ်
         colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.lightBlue,
-            brightness: Brightness.light,
+          seedColor: Colors.blueAccent,
+          background: const Color(0xFFF5F7FA), // ခဲပြာရောင်ဖျော့ဖျော့ နောက်ခံ
         ),
         useMaterial3: true,
       ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.lightBlue,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      themeMode: ThemeMode.system,
       home: const MainScreen(),
     );
   }
@@ -50,23 +54,23 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.black54,
-        backgroundColor: Colors.lightBlue,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_filled, size: 30),
+        // Modern Look ဖြစ်တဲ့ NavigationBar ကို သုံးထားပါတယ်
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_filled, color: Colors.blueAccent),
             label: 'Home',
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_tree, size: 30),
+          NavigationDestination(
+            icon: Icon(Icons.account_tree_outlined),
+            selectedIcon: Icon(Icons.account_tree, color: Colors.blueAccent),
             label: 'Vault',
           ),
         ],
@@ -80,38 +84,53 @@ class DailyHubScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Provider ထဲက Data တွေကို လှမ်းယူပါပြီ
+    final provider = Provider.of<TrackerProvider>(context);
+
     return Scaffold(
-      backgroundColor: Colors.lightBlue[100],
       appBar: AppBar(
-        title: const Text('The Daily Hub', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 28)),
-        backgroundColor: Colors.lightBlue,
+        title: const Text('The Daily Hub', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: Center(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            const Text('1,200,000', style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
-            const Text('600,000', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-            const SizedBox(height: 20),
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.lightBlue,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Center(child: Text('Insights / Ledger Cards Here', style: TextStyle(color: Colors.white))),
+      body: provider.isLoading 
+        ? const Center(child: CircularProgressIndicator()) 
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 20),
+              const Text('Total Balance', style: TextStyle(color: Colors.grey, fontSize: 16)),
+              // Database ကလာတဲ့ အစစ်အမှန် Balance ကို ပြပါမယ်
+              Text(
+                '${provider.totalBalance.toStringAsFixed(0)} Ks', 
+                style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blueAccent)
               ),
-            ),
-          ],
-        ),
-      ),
+              const SizedBox(height: 30),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5)),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Text('Transactions will appear here', style: TextStyle(color: Colors.grey)),
+                  ),
+                ),
+              ),
+            ],
+          ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Open Expense Form
+          // နောက်အပိုင်းမှာ ဒီနေရာကနေ Transaction Form ခေါ်ပါမယ်
         },
-        backgroundColor: Colors.lightBlue,
-        child: const Icon(Icons.add, color: Colors.white, size: 30),
+        backgroundColor: Colors.blueAccent,
+        elevation: 4,
+        child: const Icon(Icons.add, color: Colors.white, size: 28),
       ),
     );
   }
@@ -123,45 +142,14 @@ class VaultScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.lightBlue[100],
       appBar: AppBar(
-        title: const Text('The Vault', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 28)),
-        backgroundColor: Colors.lightBlue,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _buildTabBtn('Monthly'),
-              _buildTabBtn('Yearly'),
-              _buildTabBtn('Overview'),
-              _buildTabBtn('More'),
-            ],
-          ),
-        ),
+        title: const Text('The Vault', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
       body: const Center(
-        child: Text('Vault Categories Accordion UI Here'),
+        child: Text('Vault Data Here'),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Open Speed Dial Menu
-        },
-        backgroundColor: Colors.lightBlue,
-        child: const Icon(Icons.add, color: Colors.white, size: 30),
-      ),
-    );
-  }
-
-  Widget _buildTabBtn(String title) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.lightBlue[50],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
     );
   }
 }
