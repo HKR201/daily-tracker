@@ -21,17 +21,28 @@ class TrackerProvider extends ChangeNotifier {
 
     await loadAllData();
     
+    // အိတ်ကပ် ၃ မျိုး
     if (wallets.isEmpty) {
       await addWallet(AppWallet(name: 'Balance', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
       await addWallet(AppWallet(name: 'ဘဏ်စာရင်း', type: 'Bank', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
       await addWallet(AppWallet(name: 'ယောကျ်ားစာရင်း', type: 'Person', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
     }
     
+    // Category များကို သက်ဆိုင်ရာ Form Type အလိုက် သီးသန့် ခွဲခြားလိုက်ပါပြီ
     if (categories.isEmpty) {
       final db = await DatabaseHelper.instance.database;
       await db.insert('categories', {'name': 'Foods & Drinks', 'icon_data': 0xe25a, 'type': 'Expense'});
       await db.insert('categories', {'name': 'Shopping', 'icon_data': 0xe5fc, 'type': 'Expense'});
+      
       await db.insert('categories', {'name': 'Salary', 'icon_data': 0xe3f8, 'type': 'Income'});
+      
+      await db.insert('categories', {'name': 'KPay', 'icon_data': 0xe040, 'type': 'BankDeposit'});
+      await db.insert('categories', {'name': 'AYA', 'icon_data': 0xe040, 'type': 'BankDeposit'});
+      
+      await db.insert('categories', {'name': 'ကိုကြီး', 'icon_data': 0xe314, 'type': 'HomeTransfer'});
+      await db.insert('categories', {'name': 'အိမ်', 'icon_data': 0xe314, 'type': 'HomeTransfer'});
+      
+      await db.insert('categories', {'name': 'လွှဲငွေ', 'icon_data': 0xe491, 'type': 'HusbandDeposit'});
     }
     await loadAllData();
   }
@@ -65,10 +76,8 @@ class TrackerProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  // Label (Category) အသစ်ထည့်မည့် Function
   Future<void> addNewCategory(String name, String type) async {
     final db = await DatabaseHelper.instance.database;
-    // Icon ကို ပုံသေ အဝိုင်းလေး (0xe163) အနေနဲ့ မှတ်ပေးထားပါမယ်
     await db.insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type});
     await loadAllData();
   }
@@ -77,30 +86,39 @@ class TrackerProvider extends ChangeNotifier {
     required double amount, 
     required String type, 
     required int sourceWalletId, 
-    int? destWalletId,
     required int categoryId, 
     required String note,
     required String dateString,
   }) async {
     final db = await DatabaseHelper.instance.database;
-    
+    AppWallet srcWallet = wallets.firstWhere((w) => w.id == sourceWalletId);
+    int? destWalletId;
+
+    // အိတ်ကပ်ပြောင်းလဲမှု (Logic) များကို အတိအကျ ရေးဆွဲခြင်း
+    if (type == 'BankDeposit') {
+      destWalletId = wallets.firstWhere((w) => w.type == 'Bank').id;
+      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
+      AppWallet dest = wallets.firstWhere((w) => w.id == destWalletId);
+      await db.update('wallets', {'amount': dest.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
+    } 
+    else if (type == 'HusbandDeposit') {
+      destWalletId = wallets.firstWhere((w) => w.type == 'Person').id;
+      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
+      AppWallet dest = wallets.firstWhere((w) => w.id == destWalletId);
+      await db.update('wallets', {'amount': dest.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
+    } 
+    else if (type == 'Income') {
+      await db.update('wallets', {'amount': srcWallet.amount + amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
+    } 
+    else if (type == 'Expense' || type == 'HomeTransfer') {
+      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
+    }
+
     int id = await db.insert('transactions', AppTransaction(
       amount: amount, type: type, sourceWalletId: sourceWalletId, 
       destinationWalletId: destWalletId, categoryId: categoryId, 
       note: note, dateTimestamp: dateString
     ).toMap());
-    
-    AppWallet srcWallet = wallets.firstWhere((w) => w.id == sourceWalletId);
-    
-    if (type == 'In') {
-      await db.update('wallets', {'amount': srcWallet.amount + amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
-    } else if (type == 'E') {
-      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
-    } else if (type == 'Transfer' && destWalletId != null) {
-      AppWallet destWallet = wallets.firstWhere((w) => w.id == destWalletId);
-      await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
-      await db.update('wallets', {'amount': destWallet.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
-    }
     
     await loadAllData();
     return id;
@@ -114,14 +132,17 @@ class TrackerProvider extends ChangeNotifier {
     AppTransaction tx = AppTransaction.fromMap(txMap.first);
     AppWallet srcWallet = wallets.firstWhere((w) => w.id == tx.sourceWalletId);
     
-    if (tx.type == 'In') {
+    // ဖျက်ရင် ပြောင်းပြန် ပြန်လုပ်ခြင်း
+    if (tx.type == 'BankDeposit' || tx.type == 'HusbandDeposit') {
+      AppWallet dest = wallets.firstWhere((w) => w.id == tx.destinationWalletId);
+      await db.update('wallets', {'amount': srcWallet.amount + tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
+      await db.update('wallets', {'amount': dest.amount - tx.amount}, where: 'id = ?', whereArgs: [tx.destinationWalletId]);
+    } 
+    else if (tx.type == 'Income') {
       await db.update('wallets', {'amount': srcWallet.amount - tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
-    } else if (tx.type == 'E') {
+    } 
+    else if (tx.type == 'Expense' || tx.type == 'HomeTransfer') {
       await db.update('wallets', {'amount': srcWallet.amount + tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
-    } else if (tx.type == 'Transfer' && tx.destinationWalletId != null) {
-      AppWallet destWallet = wallets.firstWhere((w) => w.id == tx.destinationWalletId);
-      await db.update('wallets', {'amount': srcWallet.amount + tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
-      await db.update('wallets', {'amount': destWallet.amount - tx.amount}, where: 'id = ?', whereArgs: [tx.destinationWalletId]);
     }
 
     await db.delete('transactions', where: 'id = ?', whereArgs: [txId]);
