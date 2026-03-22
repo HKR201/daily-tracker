@@ -22,15 +22,24 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Install Dependencies
-        run: flutter pub get
-
-      - name: Build APK
-        run: flutter build apk --release
+      - name: Clean Workspace & Build APK
+        run: |
+          # ၁။ Flutter project အသစ်ကို app_workspace ဆိုတဲ့ နာမည်နဲ့ သီးသန့် ဖန်တီးပါမယ်
+          flutter create app_workspace --org com.tkr --project-name daily_tracker
+          
+          # ၂။ အစ်ကိုရေးထားတဲ့ ဖိုင်တွေကို အဲဒီ project အသစ်ထဲ ရွှေ့ထည့်ပါမယ်
+          cp -r lib/* app_workspace/lib/
+          cp pubspec.yaml app_workspace/
+          
+          # ၃။ Project အသစ်ထဲ ဝင်ပြီး Package တွေသွင်း၊ APK ကို အချောသတ် ထုတ်ပါမယ်
+          cd app_workspace
+          flutter pub get
+          flutter build apk --release
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DailyTracker-Draft-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
+          # လမ်းကြောင်းကို app_workspace အသစ်ထဲကနေ ပြောင်းယူပါမယ်
+          path: app_workspace/build/app/outputs/flutter-apk/app-release.apk
           
