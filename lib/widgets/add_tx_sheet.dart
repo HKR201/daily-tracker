@@ -25,17 +25,22 @@ class _AddTxSheetState extends State<AddTxSheet> {
   DateTime _selectedDate = DateTime.now();
   
   AppWallet? _selectedSourceWallet;
+  
+  // Income တွင်သာ သုံးမည့် "ပြင်ပရင်းမြစ်" Fake Wallet
+  final AppWallet _externalWallet = AppWallet(id: -1, name: 'ပြင်ပရင်းမြစ် (External)', type: 'External', amount: 0, lastUpdated: '');
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<TrackerProvider>(context, listen: false);
-      if (provider.wallets.isNotEmpty) {
-        setState(() {
+      setState(() {
+        if (widget.txType == 'Income') {
+          _selectedSourceWallet = _externalWallet;
+        } else if (provider.wallets.isNotEmpty) {
           _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Balance');
-        });
-      }
+        }
+      });
     });
   }
 
@@ -68,7 +73,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
             onPressed: () {
               if (newLabel.trim().isNotEmpty) {
-                // လက်ရှိ Form ရဲ့ Unique Type အတိုင်း Label ကို သိမ်းပါမည်
                 Provider.of<TrackerProvider>(context, listen: false).addNewCategory(newLabel.trim(), widget.txType);
                 Navigator.pop(ctx);
               }
@@ -85,37 +89,61 @@ class _AddTxSheetState extends State<AddTxSheet> {
     if (_selectedSourceWallet == null) return;
 
     final provider = Provider.of<TrackerProvider>(context, listen: false);
+    
+    // Income Form မှ လာသော Logic များကို ခွဲထုတ်ခြင်း
+    String finalTxType = widget.txType;
+    int finalSourceId = _selectedSourceWallet!.id!;
+
+    if (widget.txType == 'Income') {
+      if (_selectedSourceWallet!.id == -1) {
+        finalTxType = 'Income'; // ပြင်ပဝင်ငွေ
+        finalSourceId = provider.wallets.firstWhere((w) => w.type == 'Balance').id!;
+      } else if (_selectedSourceWallet!.type == 'Bank') {
+        finalTxType = 'IncomeFromBank'; // ဘဏ်မှဝင်ငွေ
+      } else if (_selectedSourceWallet!.type == 'Person') {
+        finalTxType = 'IncomeFromHusband'; // ယောကျ်ားမှဝင်ငွေ
+      }
+    }
+
     int newTxId = await provider.addTransaction(
-      amount: double.parse(_calcResult), type: widget.txType,
-      sourceWalletId: _selectedSourceWallet!.id!, categoryId: category.id!,
+      amount: double.parse(_calcResult), type: finalTxType,
+      sourceWalletId: finalSourceId, categoryId: category.id!,
       note: _noteCtrl.text, dateString: _selectedDate.toIso8601String(),
     );
     
     if (!mounted) return;
     Navigator.pop(context);
+    
+    // SnackBar ပြဿနာဖြေရှင်းခြင်း (FAB အပေါ်မှာပေါ်မယ်၊ ၃ စက္ကန့်နဲ့ပျောက်မယ်)
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${widget.title} Saved!'), duration: const Duration(seconds: 4), action: SnackBarAction(label: 'UNDO', textColor: Colors.redAccent, onPressed: () => provider.deleteTransaction(newTxId))),
+      SnackBar(
+        content: Text('${widget.title} Saved!'), 
+        duration: const Duration(seconds: 3), 
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20),
+        backgroundColor: Colors.black87,
+        action: SnackBarAction(label: 'UNDO', textColor: Colors.redAccent, onPressed: () => provider.deleteTransaction(newTxId))
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TrackerProvider>(context);
-    
-    // သက်ဆိုင်ရာ Form အတွက် Label များကိုသာ ပြပါမည် (Unique Labels)
     final typeCategories = provider.categories.where((c) => c.type == widget.txType).toList();
     final color = (widget.txType == 'Expense' || widget.txType == 'HomeTransfer') ? Colors.redAccent : Colors.blueAccent;
 
-    // Dropdown အတွက် မလိုအပ်သော အိတ်ကပ်များကို ဖျောက်ထားမည်
-    List<AppWallet> availableWallets = provider.wallets.where((w) {
-      if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false;
-      if (widget.txType == 'HusbandDeposit' && w.type == 'Person') return false;
-      return true;
-    }).toList();
-
-    // Amount ခေါင်းစဉ် ပြောင်းလဲခြင်း
-    String amountLabel = widget.txType == 'Income' ? 'Cash In (ဝင်ငွေ)' : 'Cash Out (ထွက်ငွေ)';
-    String fromLabel = widget.txType == 'Income' ? 'To (ဘယ်အိတ်ထဲ ဝင်မလဲ)' : 'From (ဘယ်ကနေ နှုတ်မလဲ)';
+    // Dropdown တွင်ပေါ်မည့် အိတ်ကပ်များ
+    List<AppWallet> availableWallets = [];
+    if (widget.txType == 'Income') {
+      availableWallets = [_externalWallet, ...provider.wallets.where((w) => w.type == 'Bank' || w.type == 'Person')];
+    } else {
+      availableWallets = provider.wallets.where((w) {
+        if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false;
+        if (widget.txType == 'HusbandDeposit' && w.type == 'Person') return false;
+        return true;
+      }).toList();
+    }
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
@@ -140,13 +168,13 @@ class _AddTxSheetState extends State<AddTxSheet> {
             
             TextField(
               controller: _amountCtrl, keyboardType: TextInputType.phone, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-              decoration: InputDecoration(labelText: amountLabel, labelStyle: TextStyle(color: color), suffixText: _calcResult.isNotEmpty && !_isError ? '= $_calcResult' : _calcResult, suffixStyle: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: color, width: 2))),
+              decoration: InputDecoration(labelText: widget.txType == 'Income' ? 'Cash In (ဝင်ငွေ)' : 'Cash Out (ထွက်ငွေ)', labelStyle: TextStyle(color: color), suffixText: _calcResult.isNotEmpty && !_isError ? '= $_calcResult' : _calcResult, suffixStyle: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: color, width: 2))),
               onChanged: _evaluateMath,
             ),
             const SizedBox(height: 15),
 
             DropdownButtonFormField<AppWallet>(
-              decoration: InputDecoration(labelText: fromLabel, border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15)),
+              decoration: InputDecoration(labelText: 'From (ဘယ်ကနေ ဝင်/ထွက် မလဲ)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15)),
               value: availableWallets.contains(_selectedSourceWallet) ? _selectedSourceWallet : (availableWallets.isNotEmpty ? availableWallets.first : null),
               items: availableWallets.map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
               onChanged: (val) => setState(() => _selectedSourceWallet = val),
