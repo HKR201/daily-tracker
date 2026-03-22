@@ -21,7 +21,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
   
   String _calcResult = '';
   bool _isError = false;
-  bool _showNote = false; // Note ကို နှိပ်မှပေါ်အောင် ထိန်းချုပ်မည့် Variable
+  bool _showNote = false; 
   DateTime _selectedDate = DateTime.now();
   
   AppWallet? _selectedSourceWallet;
@@ -29,11 +29,11 @@ class _AddTxSheetState extends State<AddTxSheet> {
   @override
   void initState() {
     super.initState();
-    // Form စပွင့်တာနဲ့ Default အနေဖြင့် "Balance (Main Cash)" ကို ရွေးပေးထားပါမည်
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<TrackerProvider>(context, listen: false);
       if (provider.wallets.isNotEmpty) {
         setState(() {
+          // Form ဖွင့်တာနဲ့ "Balance" ကို အရင်ဆုံး Default ရွေးထားပေးပါမယ်
           _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Balance');
         });
       }
@@ -73,6 +73,42 @@ class _AddTxSheetState extends State<AddTxSheet> {
     if (picked != null && picked != _selectedDate) {
       setState(() => _selectedDate = picked);
     }
+  }
+
+  // Label အသစ်ထည့်မည့် Popup ကို ခေါ်မည့် Function
+  void _showAddLabelDialog() {
+    String newLabel = '';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add New Label'),
+        content: TextField(
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'e.g. Phone Bills'),
+          onChanged: (val) => newLabel = val,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey))
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: widget.txType == 'E' ? Colors.redAccent : Colors.blueAccent),
+            onPressed: () {
+              if (newLabel.trim().isNotEmpty) {
+                // Provider ကိုလှမ်းပြီး Database ထဲ Label အသစ် ထည့်ခိုင်းပါမယ်
+                Provider.of<TrackerProvider>(context, listen: false).addNewCategory(
+                  newLabel.trim(), 
+                  widget.txType == 'E' ? 'Expense' : 'Income'
+                );
+                Navigator.pop(ctx);
+              }
+            }, 
+            child: const Text('Add', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _saveWithCategory(AppCategory category) async {
@@ -124,11 +160,9 @@ class _AddTxSheetState extends State<AddTxSheet> {
             Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
             const SizedBox(height: 20),
             
-            // ခေါင်းစဉ်
             Text(widget.title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
             const SizedBox(height: 15),
 
-            // Calendar ရက်စွဲ ရွေးချယ်ရန်
             GestureDetector(
               onTap: _pickDate,
               child: Container(
@@ -139,14 +173,13 @@ class _AddTxSheetState extends State<AddTxSheet> {
                   children: [
                     const Icon(Icons.chevron_left, color: Colors.grey),
                     Text(DateFormat('dd-MMM-yyyy').format(_selectedDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const Icon(Icons.calendar_today, color: Colors.blueAccent),
+                    const Icon(Icons.calendar_today, color: color),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 15),
             
-            // Amount Input (Cash In / Cash Out)
             TextField(
               controller: _amountCtrl,
               keyboardType: TextInputType.phone,
@@ -163,10 +196,10 @@ class _AddTxSheetState extends State<AddTxSheet> {
             ),
             const SizedBox(height: 15),
 
-            // From (ဘယ်အိတ်ကပ်ကနေလဲ) - Dropdown
+            // Dropdown (From)
             DropdownButtonFormField<AppWallet>(
               decoration: InputDecoration(
-                labelText: 'From (ဘယ်ကနေလဲ)',
+                labelText: 'From',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
               ),
@@ -176,39 +209,47 @@ class _AddTxSheetState extends State<AddTxSheet> {
             ),
             const SizedBox(height: 15),
 
-            // Note ကို လိုအပ်မှပေါ်အောင် လုပ်ထားပါသည်
             if (!_showNote)
               TextButton.icon(
                 onPressed: () => setState(() => _showNote = true),
                 icon: const Icon(Icons.edit_note, color: Colors.grey),
-                label: const Text('Add Note (မှတ်စုထည့်ရန်)', style: TextStyle(color: Colors.grey)),
+                label: const Text('Add Note', style: TextStyle(color: Colors.grey)),
               )
             else
               TextField(
                 controller: _noteCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Notes',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+                decoration: InputDecoration(labelText: 'Notes', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10))),
               ),
             const SizedBox(height: 25),
 
-            // Category ရွေးချယ်ပြီး Save မည့်နေရာ
             const Text('Tap a category to save (Zero-Click)', style: TextStyle(color: Colors.grey, fontSize: 14)),
             const SizedBox(height: 10),
+            
+            // Variable Labels (Categories) နှင့် + Add ခလုတ်
             Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: typeCategories.map((c) {
-                return ActionChip(
+              children: [
+                ...typeCategories.map((c) {
+                  return ActionChip(
+                    elevation: 2,
+                    backgroundColor: color.withOpacity(0.1),
+                    side: BorderSide.none,
+                    label: Text(c.name, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                    avatar: Icon(IconData(c.iconData, fontFamily: 'MaterialIcons'), color: color, size: 18),
+                    onPressed: () => _saveWithCategory(c),
+                  );
+                }),
+                
+                // + Add ခလုတ် (အမြဲတမ်း နောက်ဆုံးမှာ ပေါ်နေပါမည်)
+                ActionChip(
                   elevation: 2,
-                  backgroundColor: color.withOpacity(0.1),
+                  backgroundColor: Colors.grey[200],
                   side: BorderSide.none,
-                  label: Text(c.name, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
-                  avatar: Icon(IconData(c.iconData, fontFamily: 'MaterialIcons'), color: color, size: 18),
-                  onPressed: () => _saveWithCategory(c),
-                );
-              }).toList(),
+                  label: Text('+ Add Label', style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.bold)),
+                  onPressed: _showAddLabelDialog, // နှိပ်လိုက်လျှင် Popup ပေါ်လာပါမည်
+                ),
+              ],
             ),
             const SizedBox(height: 30),
           ],
