@@ -8,6 +8,7 @@ class TrackerProvider extends ChangeNotifier {
   List<AppTransaction> transactions = [];
 
   bool isLoading = true;
+  bool isLakhEnabled = true; // Lakh စနစ်ကို ဖွင့်ထားပါတယ်
 
   TrackerProvider() {
     _init();
@@ -15,13 +16,9 @@ class TrackerProvider extends ChangeNotifier {
 
   Future<void> _init() async {
     await loadAllData();
-    
-    // Wallet အလွတ်ဖြစ်နေရင် Main Cash ကို တည်ဆောက်မယ်
     if (wallets.isEmpty) {
       await addWallet(AppWallet(name: 'Main Cash', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
     }
-    
-    // Category အလွတ်ဖြစ်နေရင် အစမ်းသုံးဖို့ ထည့်ပေးမယ်
     if (categories.isEmpty) {
       final db = await DatabaseHelper.instance.database;
       await db.insert('categories', {'name': 'Foods & Drinks', 'icon_data': 0xe25a, 'type': 'Expense'});
@@ -43,6 +40,10 @@ class TrackerProvider extends ChangeNotifier {
     final catData = await db.query('categories');
     categories = catData.map((e) => AppCategory.fromMap(e)).toList();
 
+    // မှတ်တမ်း (Transactions) အသစ်ဆုံးကို အပေါ်ဆုံးကပြဖို့ ORDER BY ထည့်ထားပါတယ်
+    final txData = await db.query('transactions', orderBy: 'date_timestamp DESC');
+    transactions = txData.map((e) => AppTransaction.fromMap(e)).toList();
+
     isLoading = false;
     notifyListeners();
   }
@@ -53,11 +54,8 @@ class TrackerProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  // ငွေစာရင်း အသစ်သွင်းမယ့် Function
   Future<void> addTransaction({required double amount, required String type, required int categoryId, required String note}) async {
     final db = await DatabaseHelper.instance.database;
-    
-    // လက်ရှိမှာ Main Cash ထဲကပဲ အရင် နှုတ်/ပေါင်း လုပ်ပါမယ်
     int walletId = wallets.firstWhere((w) => w.type == 'Balance').id ?? 1;
 
     AppTransaction tx = AppTransaction(
@@ -69,18 +67,24 @@ class TrackerProvider extends ChangeNotifier {
       dateTimestamp: DateTime.now().toIso8601String(),
     );
 
-    // 1. Transaction ကို မှတ်မယ်
     await db.insert('transactions', tx.toMap());
 
-    // 2. Wallet ထဲက ပိုက်ဆံကို အတိုးအလျှော့လုပ်မယ်
     AppWallet wallet = wallets.firstWhere((w) => w.id == walletId);
     double newAmount = wallet.amount;
-    if (type == 'E') newAmount -= amount; // Expense ဆိုရင် နှုတ်မယ်
-    if (type == 'In') newAmount += amount; // Income ဆိုရင် ပေါင်းမယ်
+    if (type == 'E') newAmount -= amount;
+    if (type == 'In') newAmount += amount;
 
     await db.update('wallets', {'amount': newAmount}, where: 'id = ?', whereArgs: [walletId]);
-    
     await loadAllData();
+  }
+
+  // သိန်းဂဏန်းပြောင်းပေးမယ့် Function (Global Utility)
+  String formatLakh(double amount) {
+    if (isLakhEnabled && amount.abs() >= 100000) {
+      double lakh = amount / 100000;
+      return "${lakh.toStringAsFixed(1)} Lakh"; 
+    }
+    return amount.toStringAsFixed(0);
   }
 
   double get totalBalance {
