@@ -24,18 +24,18 @@ jobs:
 
       - name: Clean Workspace & Build APK
         run: |
-          # ၁။ Flutter project အသစ်ကို app_workspace ဆိုတဲ့ နာမည်နဲ့ သီးသန့် ဖန်တီးပါမယ်
           flutter create app_workspace --org com.tkr --project-name daily_tracker
-          
-          # ၂။ အစ်ကိုရေးထားတဲ့ ဖိုင်တွေကို အဲဒီ project အသစ်ထဲ ရွှေ့ထည့်ပါမယ်
           cp -r lib/* app_workspace/lib/
           cp pubspec.yaml app_workspace/
-          
-          # ၃။ Project အသစ်ထဲ ဝင်ပြီး Package တွေသွင်း၊ APK ကို အချောသတ် ထုတ်ပါမယ်
           cd app_workspace
           flutter pub get
-          # အောက်ပါလိုင်းတွင် --no-tree-shake-icons ကို ထည့်သွင်းပေးထားပါသည်
           flutter build apk --release --no-tree-shake-icons
+
+      - name: Get SHA1 Fingerprint
+        run: |
+          echo "==== ဤနေရာရှိ လက်ဗွေရာကို ကူးယူပါ ===="
+          keytool -printcert -jarfile app_workspace/build/app/outputs/flutter-apk/app-release.apk | grep SHA1
+          echo "======================================"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
