@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart'; // ကော်မာ (,) အတွက် ခေါ်ထားပါသည်
 import 'providers/tracker_provider.dart';
 import 'widgets/add_tx_sheet.dart';
 import 'models/app_models.dart';
@@ -69,10 +70,14 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
           const Text('Current Balance (လက်ကျန်ငွေ)', style: TextStyle(color: Colors.grey, fontSize: 16)),
           GestureDetector(
             onTap: _toggleBalanceView,
-            child: Text(_showFullBalance ? '${provider.totalBalance.toStringAsFixed(0)} Ks' : '${provider.formatLakh(provider.totalBalance)} Ks',
+            child: Text(_showFullBalance ? '${NumberFormat('#,###').format(provider.totalBalance)} Ks' : '${provider.formatLakh(provider.totalBalance)} Ks',
                 style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: provider.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent)),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 5),
+          // လစဉ်သုံးစရိတ်ကို အနီရောင်ဖြင့် ပြသမည်
+          Text('Monthly Expenses: -${NumberFormat('#,###').format(provider.currentMonthExpense)} Ks', 
+               style: const TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
           Expanded(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -81,7 +86,6 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                 itemCount: provider.transactions.length,
                 itemBuilder: (context, index) {
                   final tx = provider.transactions[index];
-                  // Balance ထဲကနေ ငွေထွက်သွားသော အကြောင်းအရာများ (အနှုတ်ပြမည်)
                   bool isExpense = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
                   
                   final cat = provider.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
@@ -89,7 +93,7 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                     leading: CircleAvatar(backgroundColor: isExpense ? Colors.red[50] : Colors.green[50], child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExpense ? Colors.redAccent : Colors.green)),
                     title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
-                    trailing: Text('${isExpense ? '-' : '+'}${tx.amount.toStringAsFixed(0)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isExpense ? Colors.redAccent : Colors.green)),
+                    trailing: Text('${isExpense ? '-' : '+'}${NumberFormat('#,###').format(tx.amount)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isExpense ? Colors.redAccent : Colors.green)),
                   );
                 },
               ),
@@ -150,7 +154,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
       padding: const EdgeInsets.only(bottom: 15),
       child: GestureDetector(
         onTap: onTap,
-        behavior: HitTestBehavior.opaque, // တစ်တန်းလုံး ဘယ်နှိပ်နှိပ် အလုပ်လုပ်စေရန်
+        behavior: HitTestBehavior.opaque,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
@@ -168,7 +172,6 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     return ListView(
       padding: const EdgeInsets.all(15),
       children: [
-        // Total Assets Banner
         Container(
           padding: const EdgeInsets.all(15),
           margin: const EdgeInsets.only(bottom: 15),
