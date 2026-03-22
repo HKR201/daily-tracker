@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart'; // ကော်မာ (,) ခံရန်အတွက်
 import '../models/app_models.dart';
 import '../database/db_helper.dart';
 
@@ -77,44 +78,32 @@ class TrackerProvider extends ChangeNotifier {
   }
 
   Future<int> addTransaction({
-    required double amount, 
-    required String type, 
-    required int sourceWalletId, 
-    required int categoryId, 
-    required String note,
-    required String dateString,
+    required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString,
   }) async {
     final db = await DatabaseHelper.instance.database;
     AppWallet srcWallet = wallets.firstWhere((w) => w.id == sourceWalletId);
     int? destWalletId;
 
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
-      // ဘဏ် (သို့) ယောကျ်ား ကနေ ဝင်ငွေ (Balance ထဲ ပေါင်းမယ်)
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
       await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
       AppWallet dest = wallets.firstWhere((w) => w.id == destWalletId);
       await db.update('wallets', {'amount': dest.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
     } 
     else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
-      // Balance ကနေ ဘဏ် (သို့) ယောကျ်ား ထဲ အပ်ငွေ
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
       await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
       AppWallet dest = wallets.firstWhere((w) => w.id == destWalletId);
       await db.update('wallets', {'amount': dest.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
     } 
     else if (type == 'Income') {
-      // ပြင်ပ ဝင်ငွေ (Balance ထဲပဲ ပေါင်းမယ်)
       await db.update('wallets', {'amount': srcWallet.amount + amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
     } 
     else if (type == 'Expense' || type == 'HomeTransfer') {
-      // ထွက်ငွေ
       await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
     }
 
-    int id = await db.insert('transactions', AppTransaction(
-      amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString
-    ).toMap());
-    
+    int id = await db.insert('transactions', AppTransaction(amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap());
     await loadAllData();
     return id;
   }
@@ -123,7 +112,6 @@ class TrackerProvider extends ChangeNotifier {
     final db = await DatabaseHelper.instance.database;
     final txMap = await db.query('transactions', where: 'id = ?', whereArgs: [txId]);
     if (txMap.isEmpty) return;
-    
     AppTransaction tx = AppTransaction.fromMap(txMap.first);
     AppWallet srcWallet = wallets.firstWhere((w) => w.id == tx.sourceWalletId);
     
@@ -138,14 +126,24 @@ class TrackerProvider extends ChangeNotifier {
     else if (tx.type == 'Expense' || tx.type == 'HomeTransfer') {
       await db.update('wallets', {'amount': srcWallet.amount + tx.amount}, where: 'id = ?', whereArgs: [tx.sourceWalletId]);
     }
-
     await db.delete('transactions', where: 'id = ?', whereArgs: [txId]);
     await loadAllData();
   }
 
+  // ကော်မာ ပါအောင် ပြင်ဆင်ထားသော formatLakh
   String formatLakh(double amount) {
     if (isLakhEnabled && amount.abs() >= 100000) return "${(amount / 100000).toStringAsFixed(1)} Lakh"; 
-    return amount.toStringAsFixed(0);
+    return NumberFormat('#,###').format(amount);
+  }
+
+  // ယခုလအတွက် ထွက်ငွေစုစုပေါင်းကို တွက်ပေးမည့် Function အသစ်
+  double get currentMonthExpense {
+    DateTime now = DateTime.now();
+    return transactions.where((tx) {
+      DateTime txDate = DateTime.parse(tx.dateTimestamp);
+      // Expense နဲ့ အိမ်လွှဲငွေ ကိုသာ အမှန်တကယ် ထွက်ငွေအဖြစ် သတ်မှတ်ပါမည်
+      return txDate.year == now.year && txDate.month == now.month && (tx.type == 'Expense' || tx.type == 'HomeTransfer');
+    }).fold(0.0, (sum, tx) => sum + tx.amount);
   }
 
   double get totalAssets => wallets.fold(0.0, (sum, item) => sum + item.amount);
