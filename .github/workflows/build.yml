@@ -34,12 +34,12 @@ jobs:
           # ၃။ Project အသစ်ထဲ ဝင်ပြီး Package တွေသွင်း၊ APK ကို အချောသတ် ထုတ်ပါမယ်
           cd app_workspace
           flutter pub get
-          flutter build apk --release
+          # အောက်ပါလိုင်းတွင် --no-tree-shake-icons ကို ထည့်သွင်းပေးထားပါသည်
+          flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: DailyTracker-Draft-APK
-          # လမ်းကြောင်းကို app_workspace အသစ်ထဲကနေ ပြောင်းယူပါမယ်
           path: app_workspace/build/app/outputs/flutter-apk/app-release.apk
           
