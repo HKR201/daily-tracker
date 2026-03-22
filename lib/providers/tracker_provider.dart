@@ -21,10 +21,9 @@ class TrackerProvider extends ChangeNotifier {
 
     await loadAllData();
     
-    // အိတ်ကပ် (၃) မျိုးစလုံး မရှိသေးရင် အလိုအလျောက် တည်ဆောက်ပေးပါမယ်
     if (wallets.isEmpty) {
-      await addWallet(AppWallet(name: 'Main Cash', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
-      await addWallet(AppWallet(name: 'KPay / AYA', type: 'Bank', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
+      await addWallet(AppWallet(name: 'Balance', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
+      await addWallet(AppWallet(name: 'ဘဏ်စာရင်း', type: 'Bank', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
       await addWallet(AppWallet(name: 'ယောကျ်ားစာရင်း', type: 'Person', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
     }
     
@@ -33,8 +32,6 @@ class TrackerProvider extends ChangeNotifier {
       await db.insert('categories', {'name': 'Foods & Drinks', 'icon_data': 0xe25a, 'type': 'Expense'});
       await db.insert('categories', {'name': 'Shopping', 'icon_data': 0xe5fc, 'type': 'Expense'});
       await db.insert('categories', {'name': 'Salary', 'icon_data': 0xe3f8, 'type': 'Income'});
-      await db.insert('categories', {'name': 'အိမ်လွှဲငွေ', 'icon_data': 0xe314, 'type': 'Expense'});
-      await db.insert('categories', {'name': 'ဘဏ်အပ်ငွေ', 'icon_data': 0xe040, 'type': 'Transfer'});
     }
     await loadAllData();
   }
@@ -68,7 +65,14 @@ class TrackerProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  // အိတ်ကပ်တွေ ရွေးချယ်နိုင်အောင် sourceWalletId နဲ့ destinationWalletId တွေကို လက်ခံပေးပါပြီ
+  // Label (Category) အသစ်ထည့်မည့် Function
+  Future<void> addNewCategory(String name, String type) async {
+    final db = await DatabaseHelper.instance.database;
+    // Icon ကို ပုံသေ အဝိုင်းလေး (0xe163) အနေနဲ့ မှတ်ပေးထားပါမယ်
+    await db.insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type});
+    await loadAllData();
+  }
+
   Future<int> addTransaction({
     required double amount, 
     required String type, 
@@ -81,26 +85,18 @@ class TrackerProvider extends ChangeNotifier {
     final db = await DatabaseHelper.instance.database;
     
     int id = await db.insert('transactions', AppTransaction(
-      amount: amount, 
-      type: type, 
-      sourceWalletId: sourceWalletId, 
-      destinationWalletId: destWalletId,
-      categoryId: categoryId, 
-      note: note, 
-      dateTimestamp: dateString // Calendar က ရွေးလိုက်တဲ့ အချိန်ကို သွင်းပါမယ်
+      amount: amount, type: type, sourceWalletId: sourceWalletId, 
+      destinationWalletId: destWalletId, categoryId: categoryId, 
+      note: note, dateTimestamp: dateString
     ).toMap());
     
-    // ငွေအတိုးအလျှော့ တွက်ချက်ခြင်း
     AppWallet srcWallet = wallets.firstWhere((w) => w.id == sourceWalletId);
     
     if (type == 'In') {
-      // ဝင်ငွေ (ဥပမာ - ပြင်ပကနေ Balance ထဲဝင်တာ)
       await db.update('wallets', {'amount': srcWallet.amount + amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
     } else if (type == 'E') {
-      // ထွက်ငွေ (ရွေးထားတဲ့ အိတ်ကပ်ထဲကနေ နှုတ်မယ်)
       await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
     } else if (type == 'Transfer' && destWalletId != null) {
-      // လွှဲငွေ (Source ကနေ နှုတ်ပြီး၊ Dest ထဲ ပေါင်းထည့်မယ်)
       AppWallet destWallet = wallets.firstWhere((w) => w.id == destWalletId);
       await db.update('wallets', {'amount': srcWallet.amount - amount}, where: 'id = ?', whereArgs: [sourceWalletId]);
       await db.update('wallets', {'amount': destWallet.amount + amount}, where: 'id = ?', whereArgs: [destWalletId]);
@@ -137,9 +133,6 @@ class TrackerProvider extends ChangeNotifier {
     return amount.toStringAsFixed(0);
   }
 
-  // Total Assets (Balance + Bank + Person) စုစုပေါင်း ပိုင်ဆိုင်မှု
   double get totalAssets => wallets.fold(0.0, (sum, item) => sum + item.amount);
-  
-  // Balance သီးသန့်
   double get totalBalance => wallets.where((w) => w.type == 'Balance').fold(0.0, (sum, item) => sum + item.amount);
 }
