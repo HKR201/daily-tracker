@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/tracker_provider.dart';
-import 'widgets/add_tx_sheet.dart'; // အသစ်ထည့်ထားသော Form ဖိုင်ကို လှမ်းချိတ်ပါပြီ
+import 'widgets/add_tx_sheet.dart';
+import 'models/app_models.dart'; // Category နာမည်တွေ ပြန်ရှာဖို့ ထည့်ထားပါတယ်
 
 void main() {
   runApp(
@@ -25,7 +26,7 @@ class DailyTrackerApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blueAccent,
-          background: const Color(0xFFF5F7FA), // ခဲပြာရောင်ဖျော့ဖျော့ နောက်ခံ
+          background: const Color(0xFFF5F7FA),
         ),
         useMaterial3: true,
       ),
@@ -77,8 +78,30 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-class DailyHubScreen extends StatelessWidget {
+class DailyHubScreen extends StatefulWidget {
   const DailyHubScreen({super.key});
+
+  @override
+  State<DailyHubScreen> createState() => _DailyHubScreenState();
+}
+
+class _DailyHubScreenState extends State<DailyHubScreen> {
+  // သိန်းဂဏန်း (Lakh) အပြည့်ပြမလား၊ အတိုပြမလား မှတ်မယ့်နေရာ
+  bool _showFullBalance = false;
+
+  void _toggleBalanceView() {
+    setState(() {
+      _showFullBalance = true;
+    });
+    // ၃ စက္ကန့်နေရင် ပြန်ပြောင်းပေးမယ်
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _showFullBalance = false;
+        });
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,11 +120,22 @@ class DailyHubScreen extends StatelessWidget {
             children: [
               const SizedBox(height: 20),
               const Text('Total Balance', style: TextStyle(color: Colors.grey, fontSize: 16)),
-              // Database ကလာတဲ့ အစစ်အမှန် Balance (အဝင်အထွက် ပြောင်းလဲမှုကို ချက်ချင်းပြပါမယ်)
-              Text(
-                '${provider.totalBalance.toStringAsFixed(0)} Ks', 
-                style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.blueAccent)
+              
+              // Balance ကို သိန်းဂဏန်းနဲ့ ပြမယ့် နေရာ (နှိပ်လို့ရပါတယ်)
+              GestureDetector(
+                onTap: _toggleBalanceView,
+                child: Text(
+                  _showFullBalance 
+                      ? '${provider.totalBalance.toStringAsFixed(0)} Ks' // ဂဏန်းအပြည့်ပြမယ်
+                      : '${provider.formatLakh(provider.totalBalance)} Ks', // Lakh နဲ့ပြမယ်
+                  style: TextStyle(
+                    fontSize: 40, 
+                    fontWeight: FontWeight.bold, 
+                    color: provider.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent // အနှုတ်ဆို အနီရောင်ပြမယ်
+                  ),
+                ),
               ),
+              
               const SizedBox(height: 30),
               Expanded(
                 child: Container(
@@ -114,26 +148,54 @@ class DailyHubScreen extends StatelessWidget {
                       BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 5)),
                     ],
                   ),
-                  child: const Center(
-                    child: Text('Transactions History Here', style: TextStyle(color: Colors.grey)),
-                  ),
+                  child: provider.transactions.isEmpty 
+                    ? const Center(child: Text('No Transactions Yet', style: TextStyle(color: Colors.grey)))
+                    // မှတ်တမ်းတွေ ရှိလာရင် List လေးနဲ့ ကတ်ပြားလေးတွေ ပြမယ်
+                    : ListView.builder(
+                        itemCount: provider.transactions.length,
+                        itemBuilder: (context, index) {
+                          final tx = provider.transactions[index];
+                          // Category နာမည်ကို ID ကနေ လှမ်းရှာမယ်
+                          final category = provider.categories.firstWhere(
+                            (c) => c.id == tx.categoryId, 
+                            orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense')
+                          );
+                          
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: tx.type == 'E' ? Colors.red[100] : Colors.green[100],
+                              child: Icon(IconData(category.iconData, fontFamily: 'MaterialIcons'), 
+                                          color: tx.type == 'E' ? Colors.redAccent : Colors.green),
+                            ),
+                            title: Text(category.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
+                            trailing: Text(
+                              '${tx.type == 'E' ? '-' : '+'}${tx.amount.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold, 
+                                fontSize: 16,
+                                color: tx.type == 'E' ? Colors.redAccent : Colors.green,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                 ),
               ),
             ],
           ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // အပေါင်းခလုတ်နှိပ်ရင် အောက်ကနေ Form လေး လျှောတက်လာပါမယ်
           showModalBottomSheet(
             context: context,
-            isScrollControlled: true, // Keyboard တက်လာရင် Form ကို အပေါ်တွန်းတင်ပေးမည့်စနစ်
+            isScrollControlled: true,
             backgroundColor: Colors.transparent,
             builder: (context) => Container(
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
               ),
-              child: const AddTxSheet(), // ခုနက ကျွန်တော်တို့ ဆောက်ခဲ့တဲ့ Form ဖိုင်လေးပါ
+              child: const AddTxSheet(),
             ),
           );
         },
