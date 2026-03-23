@@ -8,8 +8,9 @@ import '../models/app_models.dart';
 class AddTxSheet extends StatefulWidget {
   final String txType; 
   final String title;
+  final AppTransaction? existingTx; // ပြင်ဆင်ရန်အတွက် စာရင်းဟောင်း လက်ခံမည့် နေရာ
 
-  const AddTxSheet({super.key, required this.txType, required this.title});
+  const AddTxSheet({super.key, required this.txType, required this.title, this.existingTx});
 
   @override
   State<AddTxSheet> createState() => _AddTxSheetState();
@@ -33,10 +34,36 @@ class _AddTxSheetState extends State<AddTxSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<TrackerProvider>(context, listen: false);
       setState(() {
-        if (widget.txType == 'Income') {
-          _selectedSourceWallet = _externalWallet;
-        } else if (provider.wallets.isNotEmpty) {
-          _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Balance');
+        if (widget.existingTx != null) {
+          // Edit Mode (စာရင်းဟောင်းရှိလျှင် အသင့်ဖြည့်ပေးမည်)
+          _calcResult = NumberFormat('#,###.##').format(widget.existingTx!.amount);
+          _amountCtrl.text = _calcResult;
+          _noteCtrl.text = widget.existingTx!.note;
+          _showNote = widget.existingTx!.note.isNotEmpty;
+          _selectedDate = DateTime.parse(widget.existingTx!.dateTimestamp);
+
+          // ဝင်ငွေ အမျိုးအစားအလိုက် အိတ်ကပ်ကို အမှန်ပြန်ရွေးပေးခြင်း
+          if (widget.existingTx!.type == 'Income') {
+            _selectedSourceWallet = _externalWallet;
+          } else if (widget.existingTx!.type == 'IncomeFromBank') {
+            _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Bank');
+          } else if (widget.existingTx!.type == 'IncomeFromHusband') {
+            _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Person');
+          } else {
+            // ကျန်သောအထွေထွေ အိတ်ကပ်များ
+            try {
+              _selectedSourceWallet = provider.wallets.firstWhere((w) => w.id == widget.existingTx!.sourceWalletId);
+            } catch (e) {
+              _selectedSourceWallet = provider.wallets.first;
+            }
+          }
+        } else {
+          // Add Mode (စာရင်းအသစ် ထည့်သွင်းခြင်း)
+          if (widget.txType == 'Income') {
+            _selectedSourceWallet = _externalWallet;
+          } else if (provider.wallets.isNotEmpty) {
+            _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Balance');
+          }
         }
       });
     });
@@ -45,15 +72,11 @@ class _AddTxSheetState extends State<AddTxSheet> {
   void _evaluateMath(String input) {
     if (input.isEmpty) { setState(() { _calcResult = ''; _isError = false; }); return; }
     
-    // ၁။ တွက်ချက်ဖို့အတွက် ကော်မာတွေကို အရင်ဖြုတ်ပါမည်
     String raw = input.replaceAll(',', '');
-    
-    // ၂။ ရိုက်ထည့်လိုက်တဲ့ ဂဏန်းတွေကို ကော်မာ (,) ပြန်ခံပေးပါမည်
     String formattedInput = raw.replaceAllMapped(RegExp(r'\d+'), (match) {
       return NumberFormat('#,###').format(int.parse(match.group(0)!));
     });
 
-    // ၃။ ကော်မာခံထားတဲ့ စာသားကို TextField ထဲ အလိုအလျောက် ပြန်ထည့်ပါမည်
     if (input != formattedInput) {
       _amountCtrl.value = TextEditingValue(
         text: formattedInput,
@@ -65,7 +88,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
       String sanitized = raw.replaceAll(RegExp(r'[^0-9\+\-\*\/\.]'), '').replaceAll(RegExp(r'\+\++'), '+').replaceAll(RegExp(r'\-\-+'), '-');
       double eval = Parser().parse(sanitized).evaluate(EvaluationType.REAL, ContextModel());
       setState(() { 
-        // ၄။ အဖြေကိုလည်း ကော်မာခံပြီး ပြပါမည်
         _calcResult = eval == eval.toInt() ? NumberFormat('#,###').format(eval.toInt()) : NumberFormat('#,###.##').format(eval); 
         _isError = false; 
       });
@@ -123,28 +145,39 @@ class _AddTxSheetState extends State<AddTxSheet> {
       }
     }
 
-    int newTxId = await provider.addTransaction(
-      amount: finalAmount, type: finalTxType, sourceWalletId: finalSourceId, 
-      categoryId: category.id!, note: _noteCtrl.text, dateString: _selectedDate.toIso8601String(),
-    );
+    int newTxId = 0;
+    
+    // ပြင်ဆင်ခြင်းလား (သို့) အသစ်ထည့်ခြင်းလား စစ်ဆေး၍ သိမ်းဆည်းမည်
+    if (widget.existingTx != null) {
+      await provider.updateTransaction(
+        widget.existingTx!, 
+        amount: finalAmount, type: finalTxType, sourceWalletId: finalSourceId, 
+        categoryId: category.id!, note: _noteCtrl.text, dateString: _selectedDate.toIso8601String()
+      );
+      newTxId = widget.existingTx!.id!;
+    } else {
+      newTxId = await provider.addTransaction(
+        amount: finalAmount, type: finalTxType, sourceWalletId: finalSourceId, 
+        categoryId: category.id!, note: _noteCtrl.text, dateString: _selectedDate.toIso8601String(),
+      );
+    }
     
     if (!mounted) return;
     Navigator.pop(context);
     
-    // SnackBar အလိုလိုမပျောက်သည့် ပြဿနာကို ဖြေရှင်းထားခြင်း
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${widget.title} Saved!'), 
-        duration: const Duration(seconds: 2), // ၂ စက္ကန့်တိတိ
+        content: Text(widget.existingTx != null ? 'Record Updated!' : '${widget.title} Saved!'), 
+        duration: const Duration(seconds: 2), 
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20),
         backgroundColor: Colors.black87,
-        action: SnackBarAction(label: 'UNDO', textColor: Colors.redAccent, onPressed: () => provider.deleteTransaction(newTxId))
+        // Update လုပ်တဲ့အခါ Undo ခလုတ် မပြပါ (အသစ်သွင်းမှသာ Undo ပြမည်)
+        action: widget.existingTx != null ? null : SnackBarAction(label: 'UNDO', textColor: Colors.redAccent, onPressed: () => provider.deleteTransaction(newTxId))
       ),
     );
   }
-  
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +190,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
       availableWallets = [_externalWallet, ...provider.wallets.where((w) => w.type == 'Bank' || w.type == 'Person')];
     } else {
       availableWallets = provider.wallets.where((w) {
-        if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false;
+        if (widget.txType == 'BankDeposit' && w.wtype == 'Bank') return false;
         if (widget.txType == 'HusbandDeposit' && w.type == 'Person') return false;
         return true;
       }).toList();
@@ -171,7 +204,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
           children: [
             Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
             const SizedBox(height: 20),
-            Text(widget.title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+            Text(widget.existingTx != null ? 'Edit ${widget.title}' : widget.title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
             const SizedBox(height: 15),
 
             GestureDetector(
@@ -203,7 +236,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
             else TextField(controller: _noteCtrl, decoration: InputDecoration(labelText: 'Notes', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)))),
             const SizedBox(height: 25),
 
-            const Text('Tap a category to save (Zero-Click)', style: TextStyle(color: Colors.grey, fontSize: 14)),
+            Text(widget.existingTx != null ? 'Tap a category to Update (Zero-Click)' : 'Tap a category to save (Zero-Click)', style: const TextStyle(color: Colors.grey, fontSize: 14)),
             const SizedBox(height: 10),
             
             Wrap(
