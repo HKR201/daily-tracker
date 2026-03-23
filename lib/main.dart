@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/tracker_provider.dart';
 import 'widgets/add_tx_sheet.dart';
 import 'ledger_page.dart';
 import 'services/drive_service.dart';
-import 'models/app_models.dart';
+import 'models/app_models.dart'; 
 
 void main() { 
   runApp(MultiProvider(providers: [ChangeNotifierProvider(create: (_) => TrackerProvider())], child: const DailyTrackerApp())); 
@@ -18,7 +19,7 @@ class DailyTrackerApp extends StatelessWidget {
     final p = Provider.of<TrackerProvider>(context);
     return MaterialApp(
       debugShowCheckedModeBanner: false, 
-      themeMode: p.isDarkMode ? ThemeMode.dark : ThemeMode.light, // Dark Mode Control
+      themeMode: p.isDarkMode ? ThemeMode.dark : ThemeMode.light,
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blueAccent, brightness: Brightness.light, scaffoldBackgroundColor: const Color(0xFFF5F7FA)), 
       darkTheme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blueAccent, brightness: Brightness.dark, scaffoldBackgroundColor: const Color(0xFF121212)),
       home: const MainScreen()
@@ -51,7 +52,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// ညာဘက်ဆွဲလျှင် Delete Icon ပေါ်ပြီး ထပ်နှိပ်မှဖျက်မည့် Custom Widget
 class SwipeToDeleteItem extends StatefulWidget {
   final Widget child;
   final VoidCallback onDelete;
@@ -76,10 +76,7 @@ class _SwipeToDeleteItemState extends State<SwipeToDeleteItem> {
         });
       },
       onHorizontalDragEnd: (details) {
-        setState(() {
-          if (_dragExtent > _maxDrag / 2) { _dragExtent = _maxDrag; } 
-          else { _dragExtent = 0; }
-        });
+        setState(() => _dragExtent = (_dragExtent > _maxDrag / 2) ? _maxDrag : 0);
       },
       child: Stack(
         children: [
@@ -90,7 +87,7 @@ class _SwipeToDeleteItemState extends State<SwipeToDeleteItem> {
               child: GestureDetector(
                 onTap: () {
                   setState(() => _dragExtent = 0);
-                  widget.onDelete(); // Delete Icon ကို နှိပ်မှ အမှန်တကယ် ဖျက်မည်
+                  widget.onDelete(); 
                 },
                 child: Container(width: _maxDrag, alignment: Alignment.center, child: const Icon(Icons.delete, color: Colors.white)),
               ),
@@ -124,13 +121,12 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
     final currencyFormat = NumberFormat('#,###');
 
     return Scaffold(
-      appBar: AppBar(title: const Text('The Daily Hub', style: TextStyle(fontWeight: FontWeight.bold)), backgroundColor: Colors.transparent, elevation: 0),
+      // ခေါင်းစဉ်ကို Provider မှ ခေါ်ယူပြသခြင်း
+      appBar: AppBar(title: Text(p.hubTitle, style: const TextStyle(fontWeight: FontWeight.bold)), backgroundColor: Colors.transparent, elevation: 0),
       body: p.isLoading ? const Center(child: CircularProgressIndicator()) : Column(
         children: [
           const SizedBox(height: 20),
           const Text('Current Balance (လက်ကျန်ငွေ)', style: TextStyle(color: Colors.grey, fontSize: 16)),
-          
-          // 3 Sec Full Number View 
           GestureDetector(
             onTap: () {
               setState(() => _showFullBalance = true);
@@ -143,7 +139,6 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
               style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: p.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent),
             ),
           ),
-          
           const SizedBox(height: 5),
           Text('Monthly Expenses: -${currencyFormat.format(p.currentMonthExpense)} Ks', style: const TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
@@ -157,19 +152,16 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                 itemBuilder: (ctx, i) {
                   final tx = p.transactions[i];
                   bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
-                  // Label နာမည်နှင့် Icon အမှန်ပေါ်စေရန်
                   final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
                   
                   return SwipeToDeleteItem(
                     onDelete: () {
                       p.deleteTransaction(tx.id!);
-                      
-                      // Delete SnackBar အလိုလိုမပျောက်သည့် ပြဿနာ ရှင်းလင်းခြင်း
                       ScaffoldMessenger.of(context).clearSnackBars();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: const Text('Record deleted'),
-                          duration: const Duration(seconds: 2), // ၂ စက္ကန့်နှင့် ပျောက်မည်
+                          duration: const Duration(seconds: 2), 
                           behavior: SnackBarBehavior.floating,
                           action: SnackBarAction(label: 'UNDO', textColor: Colors.blueAccent, onPressed: () => p.undoDelete(tx)),
                         )
@@ -177,7 +169,7 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                     },
                     child: ListTile(
                       leading: CircleAvatar(backgroundColor: isExp ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1), child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExp ? Colors.redAccent : Colors.green)),
-                      title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)), // Record အစား Label နာမည်ပေါ်မည်
+                      title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
                       trailing: Text('${isExp ? '-' : '+'}${currencyFormat.format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold, fontSize: 16))
                     ),
@@ -192,6 +184,7 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
     );
   }
 }
+
 // ==========================================
 // THE VAULT & SETTINGS SCREEN
 // ==========================================
@@ -217,8 +210,9 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     final p = Provider.of<TrackerProvider>(context);
     return Scaffold(
+      // ခေါင်းစဉ်ကို Provider မှ ခေါ်ယူပြသခြင်း
       appBar: AppBar(
-        title: const Text('The Vault', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 26)), 
+        title: Text(p.vaultTitle, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 26)), 
         backgroundColor: Colors.transparent, 
         elevation: 0,
         bottom: TabBar(
@@ -237,9 +231,8 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
         ),
         if (_isOpen) GestureDetector(onTap: () => setState(() => _isOpen = false), child: Container(color: Colors.black26)),
       ]),
-      // Animation မပါဘဲ ချက်ချင်းဖျောက်မည့် နေရာ
       floatingActionButtonAnimator: FloatingActionButtonAnimator.noAnimation,
-      floatingActionButton: _tab.index == 2 ? null : _buildFab(),
+      floatingActionButton: _tab.index == 2 ? null : _buildFab(p),
     );
   }
 
@@ -269,13 +262,13 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     ]);
   }
 
-  // Premium Asset Box 
+  // သပ်သပ်ရပ်ရပ် ပြင်ဆင်ထားသော Asset Box
   Widget _buildAssetBox(TrackerProvider p) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: () => setState(() => _isAssetsHidden = !_isAssetsHidden),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15), // ဘေးဘက် Padding နည်းနည်းပိုပေးထားသည်
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
         margin: const EdgeInsets.only(bottom: 15), 
         decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(15)), 
         child: Column(
@@ -283,7 +276,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
             Stack(
               alignment: Alignment.center,
               children: [
-                const Text('Total Assets (စုစုပေါင်း ပိုင်ဆိုင်မှု)', textAlign: TextAlign.center, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                const Text('စုစုပေါင်း ပိုင်ဆိုင်မှု', textAlign: TextAlign.center, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Icon(_isAssetsHidden ? Icons.visibility_off : Icons.visibility, color: Colors.blueAccent, size: 22),
@@ -311,11 +304,16 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildFab() {
+  // FAB တွင် Pocket အမည်များကို အမှန်ပေါ်စေရန် ပြင်ဆင်ခြင်း
+  Widget _buildFab(TrackerProvider p) {
+    // Dynamic အိတ်ကပ်နာမည်များကို ယူခြင်း
+    String bankName = p.wallets.length > 1 ? p.wallets[1].name : 'ဘဏ်စာရင်း';
+    String personName = p.wallets.length > 2 ? p.wallets[2].name : 'ယောကျ်ားစာရင်း';
+
     return Column(mainAxisAlignment: MainAxisAlignment.end, children: [
       if (_isOpen) ...[
-        _btn('ယောကျ်ားအပ်ငွေ', () => _open('HusbandDeposit', 'ယောကျ်ားအပ်ငွေ')),
-        _btn('ဘဏ်အပ်ငွေ', () => _open('BankDeposit', 'ဘဏ်အပ်ငွေ')),
+        _btn(personName, () => _open('HusbandDeposit', personName)),
+        _btn(bankName, () => _open('BankDeposit', bankName)),
         _btn('အိမ်လွှဲငွေ', () => _open('HomeTransfer', 'အိမ်လွှဲငွေ')),
         _btn('ဝင်ငွေ', () => _open('Income', 'Income (ဝင်ငွေ)')),
       ],
@@ -339,6 +337,9 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   }
 }
 
+// ==========================================
+// ADVANCED SETTINGS VIEW
+// ==========================================
 class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
   @override
@@ -348,6 +349,37 @@ class SettingsView extends StatefulWidget {
 class _SettingsViewState extends State<SettingsView> {
   final GoogleDriveService _driveService = GoogleDriveService();
   bool _isSyncing = false;
+  bool _isResetting = false;
+
+  // နာမည်ပြင်ဆင်ရန်အတွက် သုံးသည့် Dialog Function
+  void _showRenameDialog(String title, String initialValue, Function(String) onSave) {
+    String newVal = initialValue;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        content: TextField(
+          autofocus: true,
+          controller: TextEditingController(text: initialValue),
+          decoration: const InputDecoration(border: OutlineInputBorder()),
+          onChanged: (val) => newVal = val,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            onPressed: () {
+              if (newVal.trim().isNotEmpty) {
+                onSave(newVal.trim());
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -357,6 +389,9 @@ class _SettingsViewState extends State<SettingsView> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        // ၁။ Display Settings
+        const Text('Display & Format', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(15)), 
           child: Column(
@@ -368,19 +403,36 @@ class _SettingsViewState extends State<SettingsView> {
           )
         ),
         const SizedBox(height: 30),
-        const Text('Cloud Backup', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
+
+        // ၂။ Personalization (စိတ်ကြိုက် နာမည်များ ပြင်ရန်)
+        const Text('Personalization (နာမည်များ ပြင်ဆင်ရန်)', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(15)), 
+          child: Column(
+            children: [
+              ListTile(leading: const Icon(Icons.title, color: Colors.blueAccent), title: const Text('Rename Daily Hub', style: TextStyle(fontWeight: FontWeight.bold)), trailing: const Icon(Icons.edit, size: 18), onTap: () => _showRenameDialog('Rename Daily Hub', provider.hubTitle, (v) => provider.updateHubTitle(v))),
+              const Divider(height: 1),
+              ListTile(leading: const Icon(Icons.title, color: Colors.blueAccent), title: const Text('Rename Vault', style: TextStyle(fontWeight: FontWeight.bold)), trailing: const Icon(Icons.edit, size: 18), onTap: () => _showRenameDialog('Rename Vault', provider.vaultTitle, (v) => provider.updateVaultTitle(v))),
+              const Divider(height: 1),
+              ExpansionTile(
+                leading: const Icon(Icons.account_balance_wallet, color: Colors.blueAccent),
+                title: const Text('Rename Pockets (အိတ်ကပ်များ)', style: TextStyle(fontWeight: FontWeight.bold)),
+                children: provider.wallets.map((w) => ListTile(
+                  title: Text(w.name),
+                  trailing: const Icon(Icons.edit, size: 18),
+                  onTap: () => _showRenameDialog('Rename Pocket', w.name, (v) => provider.renameWallet(w.id!, v))
+                )).toList(),
+              ),
+            ],
+          )
+        ),
+        const SizedBox(height: 30),
+
+        // ၃။ Cloud Backup & Reset
+        const Text('Cloud Backup & Security', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(15)),
           child: Column(
-            children: [
-              ListTile(leading: const Icon(Icons.cloud_upload, color: Colors.blueAccent), title: const Text('Backup to Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('Last synced: ${provider.lastSyncTime}'), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.backupDatabase(); provider.updateSyncTime(); setState(() => _isSyncing = false); }),
-              const Divider(height: 1),
-              ListTile(leading: const Icon(Icons.cloud_download, color: Colors.green), title: const Text('Restore from Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.restoreDatabase(); provider.loadAllData(); setState(() => _isSyncing = false); }),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
+            chil
