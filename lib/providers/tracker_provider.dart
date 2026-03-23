@@ -10,6 +10,7 @@ class TrackerProvider extends ChangeNotifier {
   List<AppTransaction> transactions = [];
   bool isLoading = true;
   bool isLakhEnabled = true;
+  bool isDarkMode = false; // Dark Mode State
   String lastSyncTime = "Never";
 
   TrackerProvider() { _init(); }
@@ -17,17 +18,16 @@ class TrackerProvider extends ChangeNotifier {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     isLakhEnabled = prefs.getBool('isLakhEnabled') ?? true;
+    isDarkMode = prefs.getBool('isDarkMode') ?? false; // Theme မှတ်ထားသည်ကို ပြန်ခေါ်ခြင်း
     lastSyncTime = prefs.getString('lastSyncTime') ?? "Never";
     await loadAllData();
 
-    // အိတ်ကပ် ၃ မျိုး မရှိသေးလျှင် ထည့်ပေးမည်
     if (wallets.isEmpty) {
       await addWallet(AppWallet(name: 'Balance', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
       await addWallet(AppWallet(name: 'ဘဏ်စာရင်း', type: 'Bank', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
       await addWallet(AppWallet(name: 'ယောကျ်ားစာရင်း', type: 'Person', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
     }
     
-    // Category Label များ မရှိသေးလျှင် ထည့်ပေးမည်
     if (categories.isEmpty) {
       final db = await DatabaseHelper.instance.database;
       await db.insert('categories', {'name': 'Foods & Drinks', 'icon_data': 0xe25a, 'type': 'Expense'});
@@ -49,14 +49,15 @@ class TrackerProvider extends ChangeNotifier {
     isLoading = false; notifyListeners();
   }
 
-  // --- CRUD Functions ---
-
-  Future<void> addNewCategory(String name, String type) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type});
-    await loadAllData();
+  // Dark Mode Toggle
+  void toggleTheme() async {
+    isDarkMode = !isDarkMode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDarkMode', isDarkMode);
+    notifyListeners();
   }
 
+  // --- Baseline Logic အတိုင်း စာရင်းသွင်းခြင်း ---
   Future<int> addTransaction({required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
     final db = await DatabaseHelper.instance.database;
     int? destWalletId;
@@ -77,6 +78,7 @@ class TrackerProvider extends ChangeNotifier {
     await loadAllData(); return id;
   }
 
+  // စာရင်းဖျက်ခြင်း (Baseline logic အတိုင်း အိတ်ကပ်ထဲပြန်ညှိသည်)
   Future<void> deleteTransaction(int txId) async {
     final tx = transactions.firstWhere((t) => t.id == txId);
     if (tx.type == 'BankDeposit' || tx.type == 'HusbandDeposit' || tx.type == 'IncomeFromBank' || tx.type == 'IncomeFromHusband') {
@@ -96,19 +98,25 @@ class TrackerProvider extends ChangeNotifier {
     await db.update('wallets', {'amount': w.amount + amount}, where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Getters & Formatting ---
-
-  double get currentMonthExpense {
-    DateTime now = DateTime.now();
-    return transactions.where((tx) {
-      DateTime txDate = DateTime.parse(tx.dateTimestamp);
-      return txDate.year == now.year && txDate.month == now.month && (tx.type == 'Expense' || tx.type == 'HomeTransfer');
-    }).fold(0.0, (sum, tx) => sum + tx.amount);
+  // Undo (ဖျက်လိုက်တာကို ပြန်ယူခြင်း) - addTransaction ကိုပဲ အသုံးပြုပါမည်
+  Future<void> undoDelete(AppTransaction oldTx) async {
+    await addTransaction(
+      amount: oldTx.amount, type: oldTx.type, sourceWalletId: oldTx.sourceWalletId,
+      categoryId: oldTx.categoryId!, note: oldTx.note, dateString: oldTx.dateTimestamp
+    );
   }
 
   String formatLakh(double amount) {
     if (isLakhEnabled && amount.abs() >= 100000) return "${(amount / 100000).toStringAsFixed(1)} Lakh";
     return NumberFormat('#,###').format(amount);
+  }
+
+  double get currentMonthExpense {
+    DateTime now = DateTime.now();
+    return transactions.where((tx) {
+      DateTime d = DateTime.parse(tx.dateTimestamp);
+      return d.year == now.year && d.month == now.month && (tx.type == 'Expense' || tx.type == 'HomeTransfer');
+    }).fold(0.0, (sum, tx) => sum + tx.amount);
   }
 
   double get totalAssets => wallets.fold(0.0, (sum, item) => sum + item.amount);
@@ -119,12 +127,9 @@ class TrackerProvider extends ChangeNotifier {
     var filtered = transactions.where((tx) {
       DateTime date = DateTime.parse(tx.dateTimestamp);
       bool timeMatch = period == 'Monthly' ? (date.year == now.year && date.month == now.month) : (date.year == now.year);
-      bool typeMatch = false;
-      if (typeGroup == 'In') typeMatch = ['Income', 'IncomeFromBank', 'IncomeFromHusband'].contains(tx.type);
-      if (typeGroup == 'Out') typeMatch = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
+      bool typeMatch = typeGroup == 'In' ? ['Income', 'IncomeFromBank', 'IncomeFromHusband'].contains(tx.type) : ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
       return timeMatch && typeMatch;
     });
-
     Map<String, double> summary = {};
     for (var tx in filtered) {
       String catName = categories.firstWhere((c) => c.id == tx.categoryId).name;
@@ -133,11 +138,9 @@ class TrackerProvider extends ChangeNotifier {
     return summary;
   }
 
-  double getPeriodTotal(String period, String typeGroup) {
-    return getSummaryByTypeAndCategory(period, typeGroup).values.fold(0.0, (a, b) => a + b);
-  }
-
+  double getPeriodTotal(String period, String typeGroup) => getSummaryByTypeAndCategory(period, typeGroup).values.fold(0.0, (a, b) => a + b);
   void toggleLakh(bool val) async { isLakhEnabled = val; (await SharedPreferences.getInstance()).setBool('isLakhEnabled', val); notifyListeners(); }
   void updateSyncTime() async { lastSyncTime = DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now()); (await SharedPreferences.getInstance()).setString('lastSyncTime', lastSyncTime); notifyListeners(); }
   Future<void> addWallet(AppWallet wallet) async { await (await DatabaseHelper.instance.database).insert('wallets', wallet.toMap()); await loadAllData(); }
+  Future<void> addNewCategory(String name, String type) async { await (await DatabaseHelper.instance.database).insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type}); await loadAllData(); }
 }
