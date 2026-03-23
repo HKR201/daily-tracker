@@ -52,7 +52,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// 🌟 Custom Swipe To Delete System
 class SwipeToDeleteItem extends StatefulWidget {
   final Widget child;
   final VoidCallback onDelete;
@@ -88,7 +87,7 @@ class _SwipeToDeleteItemState extends State<SwipeToDeleteItem> {
               child: GestureDetector(
                 onTap: () {
                   setState(() => _dragExtent = 0);
-                  widget.onDelete(); // အမှိုက်ပုံးခလုတ်ကို သေချာနှိပ်မှ ဖျက်မည်
+                  widget.onDelete(); 
                 },
                 child: Container(width: _maxDrag, alignment: Alignment.center, child: const Icon(Icons.delete, color: Colors.white)),
               ),
@@ -146,9 +145,15 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                 itemCount: p.transactions.length,
                 itemBuilder: (ctx, i) {
                   final tx = p.transactions[i];
-                  bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
                   final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
                   
+                  // 🌟 FIX: အရောင်ခွဲခြားခြင်း (Transfer များကို လိမ္မော်ရောင်/အဝါရင့်ရောင် သုံးထားသည် - မြင်သာအောင်)
+                  bool isTransfer = ['BankDeposit', 'HusbandDeposit'].contains(tx.type);
+                  bool isExp = ['Expense', 'HomeTransfer'].contains(tx.type);
+                  
+                  Color txColor = isTransfer ? Colors.orange : (isExp ? Colors.redAccent : Colors.green);
+                  String sign = (isExp || isTransfer) ? '-' : '+';
+
                   return SwipeToDeleteItem(
                     onDelete: () {
                       p.deleteTransaction(tx.id!);
@@ -156,10 +161,10 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Record deleted'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, action: SnackBarAction(label: 'UNDO', textColor: Colors.blueAccent, onPressed: () => p.undoDelete(tx))));
                     },
                     child: ListTile(
-                      leading: CircleAvatar(backgroundColor: isExp ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1), child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExp ? Colors.redAccent : Colors.green)),
+                      leading: CircleAvatar(backgroundColor: txColor.withOpacity(0.1), child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: txColor)),
                       title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
-                      trailing: Text('${isExp ? '-' : '+'}${currencyFormat.format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold, fontSize: 16))
+                      trailing: Text('$sign${currencyFormat.format(tx.amount)}', style: TextStyle(color: txColor, fontWeight: FontWeight.bold, fontSize: 16))
                     ),
                   );
                 }
@@ -246,10 +251,14 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   Widget _buildFab(TrackerProvider p) {
     String bankName = p.wallets.length > 1 ? p.wallets[1].name : 'ဘဏ်စာရင်း';
     String personName = p.wallets.length > 2 ? p.wallets[2].name : 'ယောကျ်ားစာရင်း';
-    return Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-      if (_isOpen) ...[_btn(personName, () => _open('HusbandDeposit', personName)), _btn(bankName, () => _open('BankDeposit', bankName)), _btn('အိမ်လွှဲငွေ', () => _open('HomeTransfer', 'အိမ်လွှဲငွေ')), _btn('ဝင်ငွေ', () => _open('Income', 'Income (ဝင်ငွေ)'))],
-      FloatingActionButton(onPressed: () => setState(() => _isOpen = !_isOpen), child: Icon(_isOpen ? Icons.close : Icons.add)),
-    ]);
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end, 
+      crossAxisAlignment: CrossAxisAlignment.end, // 🌟 FIX: FAB ခလုတ်များကို ညာဘက်သို့ ကပ်ပေးခြင်း
+      children: [
+        if (_isOpen) ...[_btn(personName, () => _open('HusbandDeposit', personName)), _btn(bankName, () => _open('BankDeposit', bankName)), _btn('အိမ်လွှဲငွေ', () => _open('HomeTransfer', 'အိမ်လွှဲငွေ')), _btn('ဝင်ငွေ', () => _open('Income', 'Income (ဝင်ငွေ)'))],
+        FloatingActionButton(onPressed: () => setState(() => _isOpen = !_isOpen), child: Icon(_isOpen ? Icons.close : Icons.add)),
+      ]
+    );
   }
 
   Widget _btn(String l, VoidCallback t) => Padding(padding: const EdgeInsets.only(bottom: 10), child: FloatingActionButton.extended(onPressed: t, label: Text(l), heroTag: l));
