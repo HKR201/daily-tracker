@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/tracker_provider.dart';
 import '../models/app_models.dart';
+import '../widgets/add_tx_sheet.dart'; // Edit လုပ်ရန် Form ကို လှမ်းခေါ်ရန်
 
 // ညာဘက်ဆွဲလျှင် Delete Icon ပေါ်ပြီး ထပ်နှိပ်မှဖျက်မည့် Custom Widget (Ledger အတွက် သီးသန့်)
 class SwipeToDeleteLedgerItem extends StatefulWidget {
@@ -121,6 +122,26 @@ class _LedgerPageState extends State<LedgerPage> {
     );
   }
 
+  // Edit Form ပွင့်လာစေမည့် Function
+  void _openEditSheet(AppTransaction tx, AppCategory cat) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor, 
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))
+        ),
+        child: AddTxSheet(
+          txType: cat.type, // Expense, Income စသည့် မူလအမျိုးအစား
+          title: 'Record',
+          existingTx: tx, // စာရင်းဟောင်းကို ထည့်ပေးလိုက်ပါသည် (Edit Mode ဖြစ်သွားမည်)
+        ),
+      )
+    );
+  }
+
   // Filter ၏ ခေါင်းစဉ်စာသားကို ဖော်ပြရန်
   String get _timeFilterText {
     if (_filterType == 'All') return 'All Time';
@@ -130,6 +151,15 @@ class _LedgerPageState extends State<LedgerPage> {
     return 'All Time';
   }
 
+  // အိတ်ကပ်အမည် ပြန်ရှာပေးမည့် Helper
+  String _getWalletName(int walletId, List<AppWallet> wallets) {
+    try {
+      return wallets.firstWhere((w) => w.id == walletId).name;
+    } catch (e) {
+      return 'ပြင်ပ (External)';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = Provider.of<TrackerProvider>(context);
@@ -137,11 +167,9 @@ class _LedgerPageState extends State<LedgerPage> {
 
     // 1. Data များကို Label နှင့် အချိန်အလိုက် စစ်ထုတ်ခြင်း (Filtering Logic)
     final filteredList = p.transactions.where((tx) {
-      // Label Filter
       final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0, type: 'Expense'));
       bool labelOk = (_selectedLabel == 'All') || (cat.name == _selectedLabel);
 
-      // Time Filter
       DateTime d = DateTime.parse(tx.dateTimestamp);
       bool timeOk = true;
       if (_filterType == 'Year') {
@@ -171,7 +199,6 @@ class _LedgerPageState extends State<LedgerPage> {
             color: Theme.of(context).brightness == Brightness.dark ? Colors.black12 : Colors.white,
             child: Row(
               children: [
-                // Label Dropdown
                 Expanded(
                   flex: 1,
                   child: DropdownButtonHideUnderline(
@@ -184,7 +211,6 @@ class _LedgerPageState extends State<LedgerPage> {
                   ),
                 ),
                 const SizedBox(width: 10),
-                // Time Filter Button
                 Expanded(
                   flex: 1,
                   child: OutlinedButton.icon(
@@ -205,7 +231,7 @@ class _LedgerPageState extends State<LedgerPage> {
             color: Colors.blueAccent.withOpacity(0.05),
             child: Column(
               children: [
-                Text('Total Amount (${_timeFilterText})', style: const TextStyle(color: Colors.grey)),
+                Text('Total Amount ($_timeFilterText)', style: const TextStyle(color: Colors.grey)),
                 const SizedBox(height: 5),
                 Text(
                   '${p.formatLakh(totalAmount)} Ks', 
@@ -225,16 +251,21 @@ class _LedgerPageState extends State<LedgerPage> {
                 final tx = filteredList[index];
                 bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
                 final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
+                
+                // အိတ်ကပ်နာမည် ပြသရန်ရှာဖွေခြင်း
+                String walletName = _getWalletName(tx.sourceWalletId, p.wallets);
+                String noteText = tx.note.isNotEmpty ? ' • ${tx.note}' : '';
+                String displayDate = DateFormat('dd MMM yyyy').format(DateTime.parse(tx.dateTimestamp));
 
                 return SwipeToDeleteLedgerItem(
                   onDelete: () {
-                    p.deleteTransaction(tx.id!); // ဖျက်မည် (သက်ဆိုင်ရာ ငွေများ ပြန်ပေါင်းမည်)
+                    p.deleteTransaction(tx.id!); // ဖျက်မည်
                     
                     ScaffoldMessenger.of(context).clearSnackBars();
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: const Text('Record deleted'),
-                        duration: const Duration(seconds: 3), // SnackBar issue is paused, standard wait applied
+                        duration: const Duration(seconds: 2), 
                         behavior: SnackBarBehavior.floating,
                         action: SnackBarAction(
                           label: 'UNDO', 
@@ -244,14 +275,18 @@ class _LedgerPageState extends State<LedgerPage> {
                       )
                     );
                   },
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: isExp ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1), 
-                      child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExp ? Colors.redAccent : Colors.green)
+                  child: InkWell(
+                    onTap: () => _openEditSheet(tx, cat), // နှိပ်လျှင် Edit ပွင့်မည်
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: isExp ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1), 
+                        child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExp ? Colors.redAccent : Colors.green)
+                      ),
+                      title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      // အိတ်ကပ်နာမည် • နေ့စွဲ • မှတ်စု ပုံစံဖြင့် ပြသခြင်း
+                      subtitle: Text('$walletName • $displayDate$noteText'),
+                      trailing: Text('${isExp ? '-' : '+'}${currencyFormat.format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
-                    title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('${DateFormat('dd MMM yyyy').format(DateTime.parse(tx.dateTimestamp))} • ${tx.note}'),
-                    trailing: Text('${isExp ? '-' : '+'}${currencyFormat.format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 );
               },
