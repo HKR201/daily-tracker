@@ -19,25 +19,6 @@ class TrackerProvider extends ChangeNotifier {
     isLakhEnabled = prefs.getBool('isLakhEnabled') ?? true;
     lastSyncTime = prefs.getString('lastSyncTime') ?? "Never";
     await loadAllData();
-
-    // အိတ်ကပ် ၃ မျိုး မရှိသေးလျှင် ထည့်ပေးမည်
-    if (wallets.isEmpty) {
-      await addWallet(AppWallet(name: 'Balance', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
-      await addWallet(AppWallet(name: 'ဘဏ်စာရင်း', type: 'Bank', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
-      await addWallet(AppWallet(name: 'ယောကျ်ားစာရင်း', type: 'Person', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
-    }
-    
-    // Category Label များ မရှိသေးလျှင် ထည့်ပေးမည်
-    if (categories.isEmpty) {
-      final db = await DatabaseHelper.instance.database;
-      await db.insert('categories', {'name': 'Foods & Drinks', 'icon_data': 0xe25a, 'type': 'Expense'});
-      await db.insert('categories', {'name': 'Shopping', 'icon_data': 0xe5fc, 'type': 'Expense'});
-      await db.insert('categories', {'name': 'Salary', 'icon_data': 0xe3f8, 'type': 'Income'});
-      await db.insert('categories', {'name': 'KPay', 'icon_data': 0xe040, 'type': 'BankDeposit'});
-      await db.insert('categories', {'name': 'ကိုကြီး', 'icon_data': 0xe314, 'type': 'HomeTransfer'});
-      await db.insert('categories', {'name': 'လွှဲငွေ', 'icon_data': 0xe491, 'type': 'HusbandDeposit'});
-    }
-    await loadAllData();
   }
 
   Future<void> loadAllData() async {
@@ -49,31 +30,19 @@ class TrackerProvider extends ChangeNotifier {
     isLoading = false; notifyListeners();
   }
 
-  // --- CRUD Functions ---
-
-  Future<void> addNewCategory(String name, String type) async {
-    final db = await DatabaseHelper.instance.database;
-    await db.insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type});
-    await loadAllData();
-  }
-
   Future<int> addTransaction({required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
     final db = await DatabaseHelper.instance.database;
-    int? destWalletId;
-
+    int? destId;
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
-      destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount);
+      destId = wallets.firstWhere((w) => w.type == 'Balance').id;
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destId!, amount);
     } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
-      destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount);
-    } else if (type == 'Income') {
-      _adjustWallet(sourceWalletId, amount);
-    } else {
-      _adjustWallet(sourceWalletId, -amount);
-    }
+      destId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destId!, amount);
+    } else if (type == 'Income') { _adjustWallet(sourceWalletId, amount); } 
+    else { _adjustWallet(sourceWalletId, -amount); }
 
-    int id = await db.insert('transactions', AppTransaction(amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap());
+    int id = await db.insert('transactions', AppTransaction(amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap());
     await loadAllData(); return id;
   }
 
@@ -81,11 +50,8 @@ class TrackerProvider extends ChangeNotifier {
     final tx = transactions.firstWhere((t) => t.id == txId);
     if (tx.type == 'BankDeposit' || tx.type == 'HusbandDeposit' || tx.type == 'IncomeFromBank' || tx.type == 'IncomeFromHusband') {
       _adjustWallet(tx.sourceWalletId, tx.amount); _adjustWallet(tx.destinationWalletId!, -tx.amount);
-    } else if (tx.type == 'Income') {
-      _adjustWallet(tx.sourceWalletId, -tx.amount);
-    } else {
-      _adjustWallet(tx.sourceWalletId, tx.amount);
-    }
+    } else if (tx.type == 'Income') { _adjustWallet(tx.sourceWalletId, -tx.amount); } 
+    else { _adjustWallet(tx.sourceWalletId, tx.amount); }
     await (await DatabaseHelper.instance.database).delete('transactions', where: 'id = ?', whereArgs: [txId]);
     await loadAllData();
   }
@@ -96,35 +62,20 @@ class TrackerProvider extends ChangeNotifier {
     await db.update('wallets', {'amount': w.amount + amount}, where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Getters & Formatting ---
-
-  double get currentMonthExpense {
-    DateTime now = DateTime.now();
-    return transactions.where((tx) {
-      DateTime txDate = DateTime.parse(tx.dateTimestamp);
-      return txDate.year == now.year && txDate.month == now.month && (tx.type == 'Expense' || tx.type == 'HomeTransfer');
-    }).fold(0.0, (sum, tx) => sum + tx.amount);
-  }
-
   String formatLakh(double amount) {
     if (isLakhEnabled && amount.abs() >= 100000) return "${(amount / 100000).toStringAsFixed(1)} Lakh";
     return NumberFormat('#,###').format(amount);
   }
 
-  double get totalAssets => wallets.fold(0.0, (sum, item) => sum + item.amount);
-  double get totalBalance => wallets.where((w) => w.type == 'Balance').fold(0.0, (sum, item) => sum + item.amount);
-
+  // Monthly / Yearly Summary Logic
   Map<String, double> getSummaryByTypeAndCategory(String period, String typeGroup) {
     DateTime now = DateTime.now();
     var filtered = transactions.where((tx) {
       DateTime date = DateTime.parse(tx.dateTimestamp);
       bool timeMatch = period == 'Monthly' ? (date.year == now.year && date.month == now.month) : (date.year == now.year);
-      bool typeMatch = false;
-      if (typeGroup == 'In') typeMatch = ['Income', 'IncomeFromBank', 'IncomeFromHusband'].contains(tx.type);
-      if (typeGroup == 'Out') typeMatch = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
+      bool typeMatch = typeGroup == 'In' ? ['Income', 'IncomeFromBank', 'IncomeFromHusband'].contains(tx.type) : ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
       return timeMatch && typeMatch;
     });
-
     Map<String, double> summary = {};
     for (var tx in filtered) {
       String catName = categories.firstWhere((c) => c.id == tx.categoryId).name;
@@ -133,11 +84,16 @@ class TrackerProvider extends ChangeNotifier {
     return summary;
   }
 
-  double getPeriodTotal(String period, String typeGroup) {
-    return getSummaryByTypeAndCategory(period, typeGroup).values.fold(0.0, (a, b) => a + b);
+  double getPeriodTotal(String period, String typeGroup) => getSummaryByTypeAndCategory(period, typeGroup).values.fold(0.0, (a, b) => a + b);
+  double get currentMonthExpense {
+    DateTime now = DateTime.now();
+    return transactions.where((tx) {
+      DateTime d = DateTime.parse(tx.dateTimestamp);
+      return d.year == now.year && d.month == now.month && (tx.type == 'Expense' || tx.type == 'HomeTransfer');
+    }).fold(0.0, (sum, tx) => sum + tx.amount);
   }
-
+  double get totalAssets => wallets.fold(0.0, (sum, item) => sum + item.amount);
+  double get totalBalance => wallets.where((w) => w.type == 'Balance').fold(0.0, (sum, item) => sum + item.amount);
   void toggleLakh(bool val) async { isLakhEnabled = val; (await SharedPreferences.getInstance()).setBool('isLakhEnabled', val); notifyListeners(); }
   void updateSyncTime() async { lastSyncTime = DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now()); (await SharedPreferences.getInstance()).setString('lastSyncTime', lastSyncTime); notifyListeners(); }
-  Future<void> addWallet(AppWallet wallet) async { await (await DatabaseHelper.instance.database).insert('wallets', wallet.toMap()); await loadAllData(); }
 }
