@@ -18,7 +18,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
   final TextEditingController _noteCtrl = TextEditingController();
   String _calcResult = '';
   bool _isError = false;
-  bool _showNote = false; 
   DateTime _selectedDate = DateTime.now();
   AppWallet? _selectedSourceWallet;
   final AppWallet _externalWallet = AppWallet(id: -1, name: 'ပြင်ပရင်းမြစ်', type: 'External', amount: 0, lastUpdated: '');
@@ -52,17 +51,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
     } catch (e) { setState(() { _calcResult = 'Error'; _isError = true; }); }
   }
 
-  void _showAddLabelDialog() {
-    String newLabel = '';
-    showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Add New Label'),
-      content: TextField(autofocus: true, onChanged: (v) => newLabel = v),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), ElevatedButton(onPressed: () {
-        if (newLabel.trim().isNotEmpty) { Provider.of<TrackerProvider>(context, listen: false).addNewCategory(newLabel.trim(), widget.txType); Navigator.pop(ctx); }
-      }, child: const Text('Add'))],
-    ));
-  }
-
   void _saveWithCategory(AppCategory category) async {
     if (_calcResult.isEmpty || _calcResult == 'Error') return;
     final p = Provider.of<TrackerProvider>(context, listen: false);
@@ -89,7 +77,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
     final cats = provider.categories.where((c) => c.type == widget.txType).toList();
     final color = (widget.txType == 'Expense' || widget.txType == 'HomeTransfer') ? Colors.redAccent : Colors.blueAccent;
 
-    List<AppWallet> wallets = (widget.txType == 'Income') 
+    List<AppWallet> walletList = (widget.txType == 'Income') 
         ? [_externalWallet, ...provider.wallets.where((w) => w.type != 'Balance')] 
         : provider.wallets.where((w) {
             if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false;
@@ -99,24 +87,24 @@ class _AddTxSheetState extends State<AddTxSheet> {
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
-      child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(widget.title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
         const SizedBox(height: 15),
         TextField(controller: _amountCtrl, keyboardType: TextInputType.phone, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold), onChanged: _evaluateMath, decoration: InputDecoration(labelText: 'Amount', suffixText: '= $_calcResult')),
         const SizedBox(height: 15),
         DropdownButtonFormField<AppWallet>(
-          value: wallets.contains(_selectedSourceWallet) ? _selectedSourceWallet : wallets.first,
-          items: wallets.map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
+          value: walletList.contains(_selectedSourceWallet) ? _selectedSourceWallet : walletList.first,
+          items: walletList.map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
           onChanged: (val) => setState(() => _selectedSourceWallet = val),
           decoration: const InputDecoration(labelText: 'From'),
         ),
         const SizedBox(height: 20),
         Wrap(spacing: 8, runSpacing: 8, children: [
           ...cats.map((c) => ActionChip(label: Text(c.name), onPressed: () => _saveWithCategory(c))),
-          ActionChip(backgroundColor: Colors.grey[200], label: const Text('+ Add'), onPressed: _showAddLabelDialog),
+          ActionChip(backgroundColor: Colors.grey[200], label: const Text('+ Add'), onPressed: () {}),
         ]),
         const SizedBox(height: 30),
-      ])),
+      ]),
     );
   }
 }
