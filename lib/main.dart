@@ -184,10 +184,28 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     final outSum = p.getSummaryByTypeAndCategory(period, 'Out');
     return ListView(padding: const EdgeInsets.all(15), children: [
       _buildAssetBox(p),
-      ExpansionTile(title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})'), children: inSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
-      ExpansionTile(title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})'), children: outSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
+      ExpansionTile(
+        title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})'), 
+        children: inSum.entries.map((e) => ListTile(
+          title: Text(e.key), 
+          trailing: Text(p.formatLakh(e.value)), 
+          // ဒီနေရာမှာ title နဲ့ filterCategory အဖြစ် ပြင်လိုက်ပါသည်
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key)))
+        )).toList()
+      ),
+      ExpansionTile(
+        title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})'), 
+        children: outSum.entries.map((e) => ListTile(
+          title: Text(e.key), 
+          trailing: Text(p.formatLakh(e.value)), 
+          // ဒီနေရာမှာ title နဲ့ filterCategory အဖြစ် ပြင်လိုက်ပါသည်
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key)))
+        )).toList()
+      ),
     ]);
   }
+  
+  
 
   Widget _buildAssetBox(TrackerProvider p) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
