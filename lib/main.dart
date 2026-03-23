@@ -5,6 +5,7 @@ import 'providers/tracker_provider.dart';
 import 'widgets/add_tx_sheet.dart';
 import 'ledger_page.dart';
 import 'services/drive_service.dart';
+import 'models/app_models.dart';
 
 void main() { 
   runApp(MultiProvider(providers: [ChangeNotifierProvider(create: (_) => TrackerProvider())], child: const DailyTrackerApp())); 
