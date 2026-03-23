@@ -17,7 +17,7 @@ class DailyTrackerApp extends StatelessWidget {
     final p = Provider.of<TrackerProvider>(context);
     return MaterialApp(
       debugShowCheckedModeBanner: false, 
-      themeMode: p.isDarkMode ? ThemeMode.dark : ThemeMode.light, // Dark Mode ချိန်ညှိခြင်း
+      themeMode: p.isDarkMode ? ThemeMode.dark : ThemeMode.light, // Dark Mode Control
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blueAccent, brightness: Brightness.light, scaffoldBackgroundColor: const Color(0xFFF5F7FA)), 
       darkTheme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blueAccent, brightness: Brightness.dark, scaffoldBackgroundColor: const Color(0xFF121212)),
       home: const MainScreen()
@@ -50,7 +50,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// ညာဘက်ဆွဲလျှင် Delete ခလုတ်ပေါ်လာပြီး နှိပ်မှ ဖျက်မည့် Custom Widget
+// ညာဘက်ဆွဲလျှင် Delete Icon ပေါ်ပြီး ထပ်နှိပ်မှဖျက်မည့် Custom Widget
 class SwipeToDeleteItem extends StatefulWidget {
   final Widget child;
   final VoidCallback onDelete;
@@ -89,7 +89,7 @@ class _SwipeToDeleteItemState extends State<SwipeToDeleteItem> {
               child: GestureDetector(
                 onTap: () {
                   setState(() => _dragExtent = 0);
-                  widget.onDelete(); // Delete ခလုတ်နှိပ်မှ ဖျက်မည်
+                  widget.onDelete(); // Delete Icon ကို နှိပ်မှ အမှန်တကယ် ဖျက်မည်
                 },
                 child: Container(width: _maxDrag, alignment: Alignment.center, child: const Icon(Icons.delete, color: Colors.white)),
               ),
@@ -97,63 +97,103 @@ class _SwipeToDeleteItemState extends State<SwipeToDeleteItem> {
           ),
           Transform.translate(
             offset: Offset(-_dragExtent, 0),
-            child: Container(
-              color: Theme.of(context).scaffoldBackgroundColor, // အနောက်ခံအရောင်နဲ့ ညှိထားသည်
-              child: widget.child,
-            ),
+            child: Container(color: Theme.of(context).scaffoldBackgroundColor, child: widget.child),
           ),
         ],
       ),
     );
   }
 }
-class DailyHubScreen extends StatelessWidget {
+
+// ==========================================
+// DAILY HUB SCREEN
+// ==========================================
+class DailyHubScreen extends StatefulWidget {
   const DailyHubScreen({super.key});
+  @override
+  State<DailyHubScreen> createState() => _DailyHubScreenState();
+}
+
+class _DailyHubScreenState extends State<DailyHubScreen> {
+  bool _showFullBalance = false;
+
   @override
   Widget build(BuildContext context) {
     final p = Provider.of<TrackerProvider>(context);
+    final currencyFormat = NumberFormat('#,###');
+
     return Scaffold(
-      appBar: AppBar(title: const Text('The Daily Hub')),
-      body: Column(children: [
-        const SizedBox(height: 20),
-        const Text('Current Balance', style: TextStyle(color: Colors.grey)),
-        Text(p.formatLakh(p.totalBalance), style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-        Text('Monthly Expenses: -${NumberFormat('#,###').format(p.currentMonthExpense)} Ks', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 20),
-        Expanded(child: ListView.builder(itemCount: p.transactions.length, itemBuilder: (ctx, i) {
-          final tx = p.transactions[i];
-          bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
+      appBar: AppBar(title: const Text('The Daily Hub', style: TextStyle(fontWeight: FontWeight.bold)), backgroundColor: Colors.transparent, elevation: 0),
+      body: p.isLoading ? const Center(child: CircularProgressIndicator()) : Column(
+        children: [
+          const SizedBox(height: 20),
+          const Text('Current Balance (လက်ကျန်ငွေ)', style: TextStyle(color: Colors.grey, fontSize: 16)),
           
-          return SwipeToDeleteItem(
-            onDelete: () {
-              p.deleteTransaction(tx.id!); // ဖျက်လိုက်မည်
-              
-              // SnackBar ကို ၂ စက္ကန့်နဲ့ ပျောက်အောင်နှင့် Undo လုပ်နိုင်အောင် ပြင်ဆင်ခြင်း
-              ScaffoldMessenger.of(context).clearSnackBars();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Record deleted'),
-                  duration: const Duration(seconds: 2), // 2 Sec အလိုလိုပျောက်မည်
-                  behavior: SnackBarBehavior.floating,
-                  action: SnackBarAction(
-                    label: 'UNDO', 
-                    textColor: Colors.blueAccent,
-                    onPressed: () => p.undoDelete(tx), // ပြန်ခေါ်မည်
-                  ),
-                )
-              );
+          // 3 Sec Full Number View 
+          GestureDetector(
+            onTap: () {
+              setState(() => _showFullBalance = true);
+              Future.delayed(const Duration(seconds: 3), () {
+                if (mounted) setState(() => _showFullBalance = false);
+              });
             },
-            child: ListTile(
-              title: Text(tx.note.isEmpty ? 'Record' : tx.note), 
-              trailing: Text('${isExp ? '-' : '+'}${NumberFormat('#,###').format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold))
+            child: Text(
+              _showFullBalance ? '${currencyFormat.format(p.totalBalance)} Ks' : '${p.formatLakh(p.totalBalance)} Ks',
+              style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: p.totalBalance < 0 ? Colors.redAccent : Colors.blueAccent),
             ),
-          );
-        }))
-      ]),
-      floatingActionButton: FloatingActionButton(onPressed: () => showModalBottomSheet(context: context, isScrollControlled: true, builder: (c) => const AddTxSheet(txType: 'Expense', title: 'Add Expense')), child: const Icon(Icons.remove)),
+          ),
+          
+          const SizedBox(height: 5),
+          Text('Monthly Expenses: -${currencyFormat.format(p.currentMonthExpense)} Ks', style: const TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(color: Theme.of(context).brightness == Brightness.dark ? Colors.blueGrey.withOpacity(0.1) : Colors.white, borderRadius: BorderRadius.circular(24)),
+              child: p.transactions.isEmpty ? const Center(child: Text('No Transactions Yet')) : ListView.builder(
+                itemCount: p.transactions.length,
+                itemBuilder: (ctx, i) {
+                  final tx = p.transactions[i];
+                  bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
+                  // Label နာမည်နှင့် Icon အမှန်ပေါ်စေရန်
+                  final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
+                  
+                  return SwipeToDeleteItem(
+                    onDelete: () {
+                      p.deleteTransaction(tx.id!);
+                      
+                      // Delete SnackBar အလိုလိုမပျောက်သည့် ပြဿနာ ရှင်းလင်းခြင်း
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Record deleted'),
+                          duration: const Duration(seconds: 2), // ၂ စက္ကန့်နှင့် ပျောက်မည်
+                          behavior: SnackBarBehavior.floating,
+                          action: SnackBarAction(label: 'UNDO', textColor: Colors.blueAccent, onPressed: () => p.undoDelete(tx)),
+                        )
+                      );
+                    },
+                    child: ListTile(
+                      leading: CircleAvatar(backgroundColor: isExp ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1), child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExp ? Colors.redAccent : Colors.green)),
+                      title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)), // Record အစား Label နာမည်ပေါ်မည်
+                      subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
+                      trailing: Text('${isExp ? '-' : '+'}${currencyFormat.format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold, fontSize: 16))
+                    ),
+                  );
+                }
+              ),
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(onPressed: () => showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (c) => Container(decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: const BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))), child: const AddTxSheet(txType: 'Expense', title: 'Add Expense'))), backgroundColor: Colors.redAccent, child: const Icon(Icons.remove, color: Colors.white)),
     );
   }
 }
+// ==========================================
+// THE VAULT & SETTINGS SCREEN
+// ==========================================
 class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
   @override
@@ -184,28 +224,10 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     final outSum = p.getSummaryByTypeAndCategory(period, 'Out');
     return ListView(padding: const EdgeInsets.all(15), children: [
       _buildAssetBox(p),
-      ExpansionTile(
-        title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})'), 
-        children: inSum.entries.map((e) => ListTile(
-          title: Text(e.key), 
-          trailing: Text(p.formatLakh(e.value)), 
-          // ဒီနေရာမှာ title နဲ့ filterCategory အဖြစ် ပြင်လိုက်ပါသည်
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key)))
-        )).toList()
-      ),
-      ExpansionTile(
-        title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})'), 
-        children: outSum.entries.map((e) => ListTile(
-          title: Text(e.key), 
-          trailing: Text(p.formatLakh(e.value)), 
-          // ဒီနေရာမှာ title နဲ့ filterCategory အဖြစ် ပြင်လိုက်ပါသည်
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key)))
-        )).toList()
-      ),
+      ExpansionTile(title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})'), children: inSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key))))).toList()),
+      ExpansionTile(title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})'), children: outSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key))))).toList()),
     ]);
   }
-  
-  
 
   Widget _buildAssetBox(TrackerProvider p) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -229,18 +251,51 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
   }
 
   Widget _btn(String l, VoidCallback t) => Padding(padding: const EdgeInsets.only(bottom: 10), child: FloatingActionButton.extended(onPressed: t, label: Text(l), heroTag: l));
-  void _open(String t, String ti) { setState(() => _isOpen = false); showModalBottomSheet(context: context, isScrollControlled: true, builder: (c) => AddTxSheet(txType: t, title: ti)); }
+  void _open(String t, String ti) { setState(() => _isOpen = false); showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (c) => Container(decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: const BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))), child: AddTxSheet(txType: t, title: ti))); }
 }
 
-class SettingsView extends StatelessWidget {
+class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
   @override
+  State<SettingsView> createState() => _SettingsViewState();
+}
+
+class _SettingsViewState extends State<SettingsView> {
+  final GoogleDriveService _driveService = GoogleDriveService();
+  bool _isSyncing = false;
+
+  @override
   Widget build(BuildContext context) {
-    final p = Provider.of<TrackerProvider>(context);
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      SwitchListTile(title: const Text('Lakh Format'), value: p.isLakhEnabled, onChanged: (v) => p.toggleLakh(v)),
-      SwitchListTile(title: const Text('Dark Mode'), value: p.isDarkMode, activeColor: Colors.blueAccent, onChanged: (v) => p.toggleTheme()), // Dark Mode Toggle အသစ်
-      ListTile(leading: const Icon(Icons.cloud_upload), title: const Text('Backup'), onTap: () => GoogleDriveService().backupDatabase()),
-    ]);
+    final provider = Provider.of<TrackerProvider>(context);
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Container(
+          decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(15)), 
+          child: Column(
+            children: [
+              SwitchListTile(title: const Text('Lakh Format', style: TextStyle(fontWeight: FontWeight.bold)), value: provider.isLakhEnabled, activeColor: Colors.blueAccent, onChanged: (val) => provider.toggleLakh(val)),
+              const Divider(height: 1),
+              SwitchListTile(title: const Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.bold)), value: provider.isDarkMode, activeColor: Colors.blueAccent, onChanged: (val) => provider.toggleTheme()),
+            ],
+          )
+        ),
+        const SizedBox(height: 30),
+        const Text('Cloud Backup', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(15)),
+          child: Column(
+            children: [
+              ListTile(leading: const Icon(Icons.cloud_upload, color: Colors.blueAccent), title: const Text('Backup to Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('Last synced: ${provider.lastSyncTime}'), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.backupDatabase(); provider.updateSyncTime(); setState(() => _isSyncing = false); }),
+              const Divider(height: 1),
+              ListTile(leading: const Icon(Icons.cloud_download, color: Colors.green), title: const Text('Restore from Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.restoreDatabase(); provider.loadAllData(); setState(() => _isSyncing = false); }),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
