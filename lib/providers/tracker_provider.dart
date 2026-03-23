@@ -13,6 +13,10 @@ class TrackerProvider extends ChangeNotifier {
   bool isDarkMode = false;
   String lastSyncTime = "Never";
 
+  // ခေါင်းစဉ်နာမည်များအတွက် Variable အသစ်များ (စကင်ဖတ်ထားသည့်အတိုင်း)
+  String hubTitle = 'The Daily Hub';
+  String vaultTitle = 'The Vault';
+
   TrackerProvider() { _init(); }
 
   Future<void> _init() async {
@@ -20,6 +24,11 @@ class TrackerProvider extends ChangeNotifier {
     isLakhEnabled = prefs.getBool('isLakhEnabled') ?? true;
     isDarkMode = prefs.getBool('isDarkMode') ?? false;
     lastSyncTime = prefs.getString('lastSyncTime') ?? "Never";
+    
+    // ခေါင်းစဉ်များကို ဖုန်း Memory မှ ပြန်ခေါ်ခြင်း
+    hubTitle = prefs.getString('hubTitle') ?? 'The Daily Hub';
+    vaultTitle = prefs.getString('vaultTitle') ?? 'The Vault';
+    
     await loadAllData();
 
     if (wallets.isEmpty) {
@@ -56,9 +65,30 @@ class TrackerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addNewCategory(String name, String type) async {
+  // ခေါင်းစဉ်များကို ပြင်ဆင်ရန် Function အသစ်များ
+  Future<void> updateHubTitle(String newTitle) async {
+    hubTitle = newTitle;
+    (await SharedPreferences.getInstance()).setString('hubTitle', newTitle);
+    notifyListeners();
+  }
+
+  Future<void> updateVaultTitle(String newTitle) async {
+    vaultTitle = newTitle;
+    (await SharedPreferences.getInstance()).setString('vaultTitle', newTitle);
+    notifyListeners();
+  }
+
+  // အိတ်ကပ်နာမည်များကို ပြင်ဆင်ရန် Function အသစ်
+  Future<void> renameWallet(int id, String newName) async {
     final db = await DatabaseHelper.instance.database;
-    await db.insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type});
+    await db.update('wallets', {'name': newName}, where: 'id = ?', whereArgs: [id]);
+    await loadAllData(); // Data အသစ်ပြန်ခေါ်၍ UI ကို Update လုပ်မည်
+  }
+
+  // Label အသစ်လုပ်လျှင် Icon ပါ ရွေးချယ်နိုင်ရန် Parameter (iconData) ကို ထပ်တိုးထားသည်
+  Future<void> addNewCategory(String name, String type, int iconData) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.insert('categories', {'name': name, 'icon_data': iconData, 'type': type});
     await loadAllData();
   }
 
@@ -69,11 +99,11 @@ class TrackerProvider extends ChangeNotifier {
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
       await _adjustWallet(sourceWalletId, -amount); 
-      await _adjustWallet(destWalletId!, amount); // Fix: Added !
+      await _adjustWallet(destWalletId!, amount);
     } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
       await _adjustWallet(sourceWalletId, -amount); 
-      await _adjustWallet(destWalletId!, amount); // Fix: Added !
+      await _adjustWallet(destWalletId!, amount);
     } else if (type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
       await _adjustWallet(balId, amount);
@@ -109,7 +139,6 @@ class TrackerProvider extends ChangeNotifier {
 
   Future<void> updateTransaction(AppTransaction oldTx, {required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
     
-    // ၁။ အဟောင်းကို ပြန်နုတ်/ပေါင်းမည်
     if (oldTx.type == 'BankDeposit' || oldTx.type == 'HusbandDeposit' || oldTx.type == 'IncomeFromBank' || oldTx.type == 'IncomeFromHusband') {
       await _adjustWallet(oldTx.sourceWalletId, oldTx.amount); 
       await _adjustWallet(oldTx.destinationWalletId!, -oldTx.amount);
@@ -120,16 +149,15 @@ class TrackerProvider extends ChangeNotifier {
       await _adjustWallet(oldTx.sourceWalletId, oldTx.amount);
     }
 
-    // ၂။ အသစ်ကို ထပ်မံဖြတ်တောက်မည်
     int? destWalletId;
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
       await _adjustWallet(sourceWalletId, -amount); 
-      await _adjustWallet(destWalletId!, amount); // Fix: Added !
+      await _adjustWallet(destWalletId!, amount); 
     } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
       await _adjustWallet(sourceWalletId, -amount); 
-      await _adjustWallet(destWalletId!, amount); // Fix: Added !
+      await _adjustWallet(destWalletId!, amount); 
     } else if (type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
       await _adjustWallet(balId, amount);
@@ -137,7 +165,6 @@ class TrackerProvider extends ChangeNotifier {
       await _adjustWallet(sourceWalletId, -amount);
     }
 
-    // ၃။ Database ထဲတွင် အသစ်ကို အစားထိုး သိမ်းဆည်းမည်
     final db = await DatabaseHelper.instance.database;
     await db.update('transactions', 
       AppTransaction(id: oldTx.id, amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap(),
