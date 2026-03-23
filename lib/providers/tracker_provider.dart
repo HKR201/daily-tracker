@@ -68,15 +68,17 @@ class TrackerProvider extends ChangeNotifier {
 
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
+      await _adjustWallet(sourceWalletId, -amount); 
+      await _adjustWallet(destWalletId, amount);
     } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
+      await _adjustWallet(sourceWalletId, -amount); 
+      await _adjustWallet(destWalletId, amount);
     } else if (type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
-      _adjustWallet(balId, amount);
+      await _adjustWallet(balId, amount);
     } else {
-      _adjustWallet(sourceWalletId, -amount);
+      await _adjustWallet(sourceWalletId, -amount);
     }
 
     int id = await db.insert('transactions', AppTransaction(amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap());
@@ -86,12 +88,13 @@ class TrackerProvider extends ChangeNotifier {
   Future<void> deleteTransaction(int txId) async {
     final tx = transactions.firstWhere((t) => t.id == txId);
     if (tx.type == 'BankDeposit' || tx.type == 'HusbandDeposit' || tx.type == 'IncomeFromBank' || tx.type == 'IncomeFromHusband') {
-      _adjustWallet(tx.sourceWalletId, tx.amount); _adjustWallet(tx.destinationWalletId!, -tx.amount);
+      await _adjustWallet(tx.sourceWalletId, tx.amount); 
+      await _adjustWallet(tx.destinationWalletId!, -tx.amount);
     } else if (tx.type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
-      _adjustWallet(balId, -tx.amount);
+      await _adjustWallet(balId, -tx.amount);
     } else {
-      _adjustWallet(tx.sourceWalletId, tx.amount);
+      await _adjustWallet(tx.sourceWalletId, tx.amount);
     }
     await (await DatabaseHelper.instance.database).delete('transactions', where: 'id = ?', whereArgs: [txId]);
     await loadAllData();
@@ -106,29 +109,35 @@ class TrackerProvider extends ChangeNotifier {
 
   Future<void> updateTransaction(AppTransaction oldTx, {required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
     
+    // ၁။ အဟောင်းကို ပြန်နုတ်/ပေါင်းမည် (Database တွင် အသေအချာ Save ပြီးမှ ဆက်လုပ်ရန် await သုံးထားသည်)
     if (oldTx.type == 'BankDeposit' || oldTx.type == 'HusbandDeposit' || oldTx.type == 'IncomeFromBank' || oldTx.type == 'IncomeFromHusband') {
-      _adjustWallet(oldTx.sourceWalletId, oldTx.amount); _adjustWallet(oldTx.destinationWalletId!, -oldTx.amount);
+      await _adjustWallet(oldTx.sourceWalletId, oldTx.amount); 
+      await _adjustWallet(oldTx.destinationWalletId!, -oldTx.amount);
     } else if (oldTx.type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
-      _adjustWallet(balId, -oldTx.amount);
+      await _adjustWallet(balId, -oldTx.amount);
     } else {
-      _adjustWallet(oldTx.sourceWalletId, oldTx.amount);
+      await _adjustWallet(oldTx.sourceWalletId, oldTx.amount);
     }
 
+    // ၂။ အသစ်ကို ထပ်မံဖြတ်တောက်မည်
     int? destWalletId;
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
+      await _adjustWallet(sourceWalletId, -amount); 
+      await _adjustWallet(destWalletId, amount);
     } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
+      await _adjustWallet(sourceWalletId, -amount); 
+      await _adjustWallet(destWalletId, amount);
     } else if (type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
-      _adjustWallet(balId, amount);
+      await _adjustWallet(balId, amount);
     } else {
-      _adjustWallet(sourceWalletId, -amount);
+      await _adjustWallet(sourceWalletId, -amount);
     }
 
+    // ၃။ Database ထဲတွင် အသစ်ကို အစားထိုး သိမ်းဆည်းမည်
     final db = await DatabaseHelper.instance.database;
     await db.update('transactions', 
       AppTransaction(id: oldTx.id, amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap(),
@@ -137,10 +146,14 @@ class TrackerProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  void _adjustWallet(int id, double amount) async {
+  // Database ထဲက နောက်ဆုံးလက်ကျန်ငွေကို တိုက်ရိုက်ခေါ်ယူ တွက်ချက်သည့် Function (Race Condition အား ကာကွယ်ရန်)
+  Future<void> _adjustWallet(int id, double amount) async {
     final db = await DatabaseHelper.instance.database;
-    final w = wallets.firstWhere((w) => w.id == id);
-    await db.update('wallets', {'amount': w.amount + amount}, where: 'id = ?', whereArgs: [id]);
+    final List<Map<String, dynamic>> res = await db.query('wallets', where: 'id = ?', whereArgs: [id]);
+    if (res.isNotEmpty) {
+      double currentAmount = res.first['amount'];
+      await db.update('wallets', {'amount': currentAmount + amount}, where: 'id = ?', whereArgs: [id]);
+    }
   }
 
   String formatLakh(double amount) {
