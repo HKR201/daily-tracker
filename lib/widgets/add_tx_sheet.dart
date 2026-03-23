@@ -8,7 +8,9 @@ import '../models/app_models.dart';
 class AddTxSheet extends StatefulWidget {
   final String txType; 
   final String title;
+
   const AddTxSheet({super.key, required this.txType, required this.title});
+
   @override
   State<AddTxSheet> createState() => _AddTxSheetState();
 }
@@ -16,95 +18,206 @@ class AddTxSheet extends StatefulWidget {
 class _AddTxSheetState extends State<AddTxSheet> {
   final TextEditingController _amountCtrl = TextEditingController();
   final TextEditingController _noteCtrl = TextEditingController();
+  
   String _calcResult = '';
   bool _isError = false;
+  bool _showNote = false; 
   DateTime _selectedDate = DateTime.now();
+  
   AppWallet? _selectedSourceWallet;
-  final AppWallet _externalWallet = AppWallet(id: -1, name: 'ပြင်ပရင်းမြစ်', type: 'External', amount: 0, lastUpdated: '');
+  final AppWallet _externalWallet = AppWallet(id: -1, name: 'ပြင်ပရင်းမြစ် (External)', type: 'External', amount: 0, lastUpdated: '');
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final p = Provider.of<TrackerProvider>(context, listen: false);
+      final provider = Provider.of<TrackerProvider>(context, listen: false);
       setState(() {
-        if (widget.txType == 'Income') _selectedSourceWallet = _externalWallet;
-        else _selectedSourceWallet = p.wallets.firstWhere((w) => w.type == 'Balance');
+        if (widget.txType == 'Income') {
+          _selectedSourceWallet = _externalWallet;
+        } else if (provider.wallets.isNotEmpty) {
+          _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Balance');
+        }
       });
     });
   }
 
   void _evaluateMath(String input) {
     if (input.isEmpty) { setState(() { _calcResult = ''; _isError = false; }); return; }
+    
+    // ၁။ တွက်ချက်ဖို့အတွက် ကော်မာတွေကို အရင်ဖြုတ်ပါမည်
     String raw = input.replaceAll(',', '');
-    String formatted = raw.replaceAllMapped(RegExp(r'\d+'), (m) => NumberFormat('#,###').format(int.parse(m.group(0)!)));
-    if (input != formatted) {
-      _amountCtrl.value = TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
+    
+    // ၂။ ရိုက်ထည့်လိုက်တဲ့ ဂဏန်းတွေကို ကော်မာ (,) ပြန်ခံပေးပါမည်
+    String formattedInput = raw.replaceAllMapped(RegExp(r'\d+'), (match) {
+      return NumberFormat('#,###').format(int.parse(match.group(0)!));
+    });
+
+    // ၃။ ကော်မာခံထားတဲ့ စာသားကို TextField ထဲ အလိုအလျောက် ပြန်ထည့်ပါမည်
+    if (input != formattedInput) {
+      _amountCtrl.value = TextEditingValue(
+        text: formattedInput,
+        selection: TextSelection.collapsed(offset: formattedInput.length),
+      );
     }
+
     try {
       String sanitized = raw.replaceAll(RegExp(r'[^0-9\+\-\*\/\.]'), '').replaceAll(RegExp(r'\+\++'), '+').replaceAll(RegExp(r'\-\-+'), '-');
       double eval = Parser().parse(sanitized).evaluate(EvaluationType.REAL, ContextModel());
       setState(() { 
+        // ၄။ အဖြေကိုလည်း ကော်မာခံပြီး ပြပါမည်
         _calcResult = eval == eval.toInt() ? NumberFormat('#,###').format(eval.toInt()) : NumberFormat('#,###.##').format(eval); 
         _isError = false; 
       });
-    } catch (e) { setState(() { _calcResult = 'Error'; _isError = true; }); }
+    } catch (e) {
+      setState(() { _calcResult = 'Error'; _isError = true; });
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime? picked = await showDatePicker(context: context, initialDate: _selectedDate, firstDate: DateTime(2020), lastDate: DateTime(2030));
+    if (picked != null && picked != _selectedDate) setState(() => _selectedDate = picked);
+  }
+
+  void _showAddLabelDialog() {
+    String newLabel = '';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add New Label'),
+        content: TextField(autofocus: true, decoration: const InputDecoration(hintText: 'Enter name'), onChanged: (val) => newLabel = val),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            onPressed: () {
+              if (newLabel.trim().isNotEmpty) {
+                Provider.of<TrackerProvider>(context, listen: false).addNewCategory(newLabel.trim(), widget.txType);
+                Navigator.pop(ctx);
+              }
+            }, 
+            child: const Text('Add', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _saveWithCategory(AppCategory category) async {
-    if (_calcResult.isEmpty || _calcResult == 'Error') return;
-    final p = Provider.of<TrackerProvider>(context, listen: false);
-    double amount = double.parse(_calcResult.replaceAll(',', ''));
-    String finalType = widget.txType;
-    int sourceId = _selectedSourceWallet!.id!;
+    if (_calcResult.isEmpty || _calcResult == 'Error' || _calcResult == '0') return;
+    if (_selectedSourceWallet == null) return;
+
+    final provider = Provider.of<TrackerProvider>(context, listen: false);
+    
+    // Save လုပ်မည့်အခါ ကော်မာတွေကို ပြန်ဖြုတ်ပြီးမှ သိမ်းပါမည်
+    double finalAmount = double.parse(_calcResult.replaceAll(',', ''));
+
+    String finalTxType = widget.txType;
+    int finalSourceId = _selectedSourceWallet!.id!;
 
     if (widget.txType == 'Income') {
-      if (_selectedSourceWallet!.id == -1) { finalType = 'Income'; sourceId = p.wallets.firstWhere((w) => w.type == 'Balance').id!; }
-      else if (_selectedSourceWallet!.type == 'Bank') finalType = 'IncomeFromBank';
-      else if (_selectedSourceWallet!.type == 'Person') finalType = 'IncomeFromHusband';
+      if (_selectedSourceWallet!.id == -1) {
+        finalTxType = 'Income'; 
+        finalSourceId = provider.wallets.firstWhere((w) => w.type == 'Balance').id!;
+      } else if (_selectedSourceWallet!.type == 'Bank') {
+        finalTxType = 'IncomeFromBank'; 
+      } else if (_selectedSourceWallet!.type == 'Person') {
+        finalTxType = 'IncomeFromHusband'; 
+      }
     }
 
-    await p.addTransaction(amount: amount, type: finalType, sourceWalletId: sourceId, categoryId: category.id!, note: _noteCtrl.text, dateString: _selectedDate.toIso8601String());
+    int newTxId = await provider.addTransaction(
+      amount: finalAmount, type: finalTxType,
+      sourceWalletId: finalSourceId, categoryId: category.id!,
+      note: _noteCtrl.text, dateString: _selectedDate.toIso8601String(),
+    );
+    
     if (!mounted) return;
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.title} Saved!'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20)));
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${widget.title} Saved!'), 
+        duration: const Duration(seconds: 3), 
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20),
+        backgroundColor: Colors.black87,
+        action: SnackBarAction(label: 'UNDO', textColor: Colors.redAccent, onPressed: () => provider.deleteTransaction(newTxId))
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<TrackerProvider>(context);
-    final cats = provider.categories.where((c) => c.type == widget.txType).toList();
+    final typeCategories = provider.categories.where((c) => c.type == widget.txType).toList();
     final color = (widget.txType == 'Expense' || widget.txType == 'HomeTransfer') ? Colors.redAccent : Colors.blueAccent;
 
-    List<AppWallet> walletList = (widget.txType == 'Income') 
-        ? [_externalWallet, ...provider.wallets.where((w) => w.type != 'Balance')] 
-        : provider.wallets.where((w) {
-            if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false;
-            if (widget.txType == 'HusbandDeposit' && w.type == 'Person') return false;
-            return true;
-          }).toList();
+    List<AppWallet> availableWallets = [];
+    if (widget.txType == 'Income') {
+      availableWallets = [_externalWallet, ...provider.wallets.where((w) => w.type == 'Bank' || w.type == 'Person')];
+    } else {
+      availableWallets = provider.wallets.where((w) {
+        if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false;
+        if (widget.txType == 'HusbandDeposit' && w.type == 'Person') return false;
+        return true;
+      }).toList();
+    }
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(widget.title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-        const SizedBox(height: 15),
-        TextField(controller: _amountCtrl, keyboardType: TextInputType.phone, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold), onChanged: _evaluateMath, decoration: InputDecoration(labelText: 'Amount', suffixText: '= $_calcResult')),
-        const SizedBox(height: 15),
-        DropdownButtonFormField<AppWallet>(
-          value: walletList.contains(_selectedSourceWallet) ? _selectedSourceWallet : walletList.first,
-          items: walletList.map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
-          onChanged: (val) => setState(() => _selectedSourceWallet = val),
-          decoration: const InputDecoration(labelText: 'From'),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
+            const SizedBox(height: 20),
+            Text(widget.title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 15),
+
+            GestureDetector(
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+                decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!), borderRadius: BorderRadius.circular(10)),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Icon(Icons.chevron_left, color: Colors.grey), Text(DateFormat('dd-MMM-yyyy').format(_selectedDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)), Icon(Icons.calendar_today, color: color)]),
+              ),
+            ),
+            const SizedBox(height: 15),
+            
+            TextField(
+              controller: _amountCtrl, keyboardType: TextInputType.phone, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+              decoration: InputDecoration(labelText: widget.txType == 'Income' ? 'Cash In (ဝင်ငွေ)' : 'Cash Out (ထွက်ငွေ)', labelStyle: TextStyle(color: color), suffixText: _calcResult.isNotEmpty && !_isError ? '= $_calcResult' : _calcResult, suffixStyle: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20), border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: color, width: 2))),
+              onChanged: _evaluateMath,
+            ),
+            const SizedBox(height: 15),
+
+            DropdownButtonFormField<AppWallet>(
+              decoration: InputDecoration(labelText: 'From (ဘယ်ကနေ ဝင်/ထွက် မလဲ)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15)),
+              value: availableWallets.contains(_selectedSourceWallet) ? _selectedSourceWallet : (availableWallets.isNotEmpty ? availableWallets.first : null),
+              items: availableWallets.map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
+              onChanged: (val) => setState(() => _selectedSourceWallet = val),
+            ),
+            const SizedBox(height: 15),
+
+            if (!_showNote) TextButton.icon(onPressed: () => setState(() => _showNote = true), icon: const Icon(Icons.edit_note, color: Colors.grey), label: const Text('Add Note', style: TextStyle(color: Colors.grey)))
+            else TextField(controller: _noteCtrl, decoration: InputDecoration(labelText: 'Notes', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)))),
+            const SizedBox(height: 25),
+
+            const Text('Tap a category to save (Zero-Click)', style: TextStyle(color: Colors.grey, fontSize: 14)),
+            const SizedBox(height: 10),
+            
+            Wrap(
+              spacing: 10, runSpacing: 10,
+              children: [
+                ...typeCategories.map((c) => ActionChip(elevation: 2, backgroundColor: color.withOpacity(0.1), side: BorderSide.none, label: Text(c.name, style: TextStyle(color: color, fontWeight: FontWeight.bold)), avatar: Icon(IconData(c.iconData, fontFamily: 'MaterialIcons'), color: color, size: 18), onPressed: () => _saveWithCategory(c))),
+                ActionChip(elevation: 2, backgroundColor: Colors.grey[200], side: BorderSide.none, label: Text('+ Add Label', style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.bold)), onPressed: _showAddLabelDialog),
+              ],
+            ),
+            const SizedBox(height: 30),
+          ],
         ),
-        const SizedBox(height: 20),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          ...cats.map((c) => ActionChip(label: Text(c.name), onPressed: () => _saveWithCategory(c))),
-          ActionChip(backgroundColor: Colors.grey[200], label: const Text('+ Add'), onPressed: () {}),
-        ]),
-        const SizedBox(height: 30),
-      ]),
+      ),
     );
   }
 }
