@@ -11,7 +11,7 @@ void main() { runApp(MultiProvider(providers: [ChangeNotifierProvider(create: (_
 class DailyTrackerApp extends StatelessWidget {
   const DailyTrackerApp({super.key});
   @override
-  Widget build(BuildContext context) { return MaterialApp(debugShowCheckedModeBanner: false, theme: ThemeData(useMaterial3: true), home: const MainScreen()); }
+  Widget build(BuildContext context) { return MaterialApp(debugShowCheckedModeBanner: false, theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blueAccent), home: const MainScreen()); }
 }
 
 class MainScreen extends StatefulWidget {
@@ -35,19 +35,21 @@ class DailyHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Provider.of<TrackerProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Daily Hub')),
+      appBar: AppBar(title: const Text('The Daily Hub')),
       body: Column(children: [
         const SizedBox(height: 20),
-        Text('Current Balance', style: const TextStyle(color: Colors.grey)),
-        Text(p.formatLakh(p.totalBalance), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-        Text('Monthly Expenses: -${NumberFormat('#,###').format(p.currentMonthExpense)} Ks', style: const TextStyle(color: Colors.red)),
+        const Text('Current Balance', style: TextStyle(color: Colors.grey)),
+        Text(p.formatLakh(p.totalBalance), style: const TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+        Text('Monthly Expenses: -${NumberFormat('#,###').format(p.currentMonthExpense)} Ks', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
         Expanded(child: ListView.builder(itemCount: p.transactions.length, itemBuilder: (ctx, i) {
           final tx = p.transactions[i];
+          bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
           return Dismissible(
             key: Key('hub-${tx.id}'),
             confirmDismiss: (dir) async => await showDialog(context: context, builder: (c) => AlertDialog(title: const Text('Delete?'), actions: [TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')), TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Yes'))])),
             onDismissed: (_) => p.deleteTransaction(tx.id!),
-            child: ListTile(title: Text(tx.note), trailing: Text(p.formatLakh(tx.amount))),
+            child: ListTile(title: Text(tx.note.isEmpty ? 'Record' : tx.note), trailing: Text('${isExp ? '-' : '+'}${NumberFormat('#,###').format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold))),
           );
         }))
       ]),
@@ -64,15 +66,20 @@ class VaultScreen extends StatefulWidget {
 
 class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin {
   late TabController _tab;
+  bool _isOpen = false;
   @override
-  void initState() { super.initState(); _tab = TabController(length: 4, vsync: this); }
+  void initState() { super.initState(); _tab = TabController(length: 4, vsync: this); _tab.addListener(() => setState(() {})); }
 
   @override
   Widget build(BuildContext context) {
     final p = Provider.of<TrackerProvider>(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Vault'), bottom: TabBar(controller: _tab, tabs: const [Tab(text: 'Monthly'), Tab(text: 'Yearly'), Tab(text: 'Overview'), Tab(text: 'More')])),
-      body: TabBarView(controller: _tab, children: [_buildAccordion(p, 'Monthly'), _buildAccordion(p, 'Yearly'), const Center(child: Text('Overview')), const SettingsView()]),
+      appBar: AppBar(title: const Text('The Vault'), bottom: TabBar(controller: _tab, isScrollable: true, tabs: const [Tab(text: 'Monthly'), Tab(text: 'Yearly'), Tab(text: 'Overview'), Tab(text: 'More')])),
+      body: Stack(children: [
+        TabBarView(controller: _tab, children: [_buildAccordion(p, 'Monthly'), _buildAccordion(p, 'Yearly'), const Center(child: Text('Overview')), const SettingsView()]),
+        if (_isOpen) GestureDetector(onTap: () => setState(() => _isOpen = false), child: Container(color: Colors.black26)),
+      ]),
+      floatingActionButton: _tab.index == 3 ? null : _buildFab(),
     );
   }
 
@@ -81,18 +88,33 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     final outSum = p.getSummaryByTypeAndCategory(period, 'Out');
     return ListView(padding: const EdgeInsets.all(15), children: [
       _buildAssetBox(p),
-      ExpansionTile(title: const Text('Total In'), children: inSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
-      ExpansionTile(title: const Text('Total Out'), children: outSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
+      ExpansionTile(title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})'), children: inSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
+      ExpansionTile(title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})'), children: outSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
     ]);
   }
 
   Widget _buildAssetBox(TrackerProvider p) {
-    return Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(15)), child: Column(children: [
-      const Text('Total Assets'), Text(p.formatLakh(p.totalAssets), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+    return Container(padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 15), decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(15)), child: Column(children: [
+      const Text('Total Assets'), Text(p.formatLakh(p.totalAssets), style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
       const Divider(),
-      Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: p.wallets.map((w) => Column(children: [Text(w.name), Text(p.formatLakh(w.amount))])).toList())
+      Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: p.wallets.map((w) => Column(children: [Text(w.name, style: const TextStyle(fontSize: 12)), Text(p.formatLakh(w.amount), style: const TextStyle(fontWeight: FontWeight.bold))])).toList())
     ]));
   }
+
+  Widget _buildFab() {
+    return Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+      if (_isOpen) ...[
+        _btn('ယောကျ်ားအပ်ငွေ', () => _open('HusbandDeposit', 'ယောကျ်ားအပ်ငွေ')),
+        _btn('ဘဏ်အပ်ငွေ', () => _open('BankDeposit', 'ဘဏ်အပ်ငွေ')),
+        _btn('အိမ်လွှဲငွေ', () => _open('HomeTransfer', 'အိမ်လွှဲငွေ')),
+        _btn('ဝင်ငွေ', () => _open('Income', 'Income (ဝင်ငွေ)')),
+      ],
+      FloatingActionButton(onPressed: () => setState(() => _isOpen = !_isOpen), child: Icon(_isOpen ? Icons.close : Icons.add)),
+    ]);
+  }
+
+  Widget _btn(String l, VoidCallback t) => Padding(padding: const EdgeInsets.only(bottom: 10), child: FloatingActionButton.extended(onPressed: t, label: Text(l), heroTag: l));
+  void _open(String t, String ti) { setState(() => _isOpen = false); showModalBottomSheet(context: context, isScrollControlled: true, builder: (c) => AddTxSheet(txType: t, title: ti)); }
 }
 
 class SettingsView extends StatelessWidget {
