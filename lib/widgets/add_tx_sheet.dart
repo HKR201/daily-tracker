@@ -65,8 +65,12 @@ class _AddTxSheetState extends State<AddTxSheet> {
     });
   }
 
+  // 🌟 FIX: (Point 5) Math Expression UX - Keyboard လေးလံမှုမဖြစ်စေရန် ပြင်ဆင်ထားသည်
   void _evaluateMath(String input) {
-    if (input.isEmpty) { setState(() { _calcResult = ''; _isError = false; }); return; }
+    if (input.isEmpty) { 
+      if (_calcResult.isNotEmpty) setState(() { _calcResult = ''; _isError = false; }); 
+      return; 
+    }
     
     String raw = input.replaceAll(',', '');
     String formattedInput = raw.replaceAllMapped(RegExp(r'\d+'), (match) {
@@ -82,13 +86,27 @@ class _AddTxSheetState extends State<AddTxSheet> {
 
     try {
       String sanitized = raw.replaceAll(RegExp(r'[^0-9\+\-\*\/\.]'), '').replaceAll(RegExp(r'\+\++'), '+').replaceAll(RegExp(r'\-\-+'), '-');
+      
+      // နောက်ဆုံးတွင် Operator များ (+, -, *, /) ပါနေပါက တွက်ချက်ခြင်းကို ခေတ္တရပ်ထားမည်။ (UI Rebuild မလုပ်ပါ)
+      if (sanitized.endsWith('+') || sanitized.endsWith('-') || sanitized.endsWith('*') || sanitized.endsWith('/')) {
+        return; 
+      }
+
       double eval = Parser().parse(sanitized).evaluate(EvaluationType.REAL, ContextModel());
-      setState(() { 
-        _calcResult = eval == eval.toInt() ? NumberFormat('#,###').format(eval.toInt()) : NumberFormat('#,###.##').format(eval); 
-        _isError = false; 
-      });
+      String newResult = eval == eval.toInt() ? NumberFormat('#,###').format(eval.toInt()) : NumberFormat('#,###.##').format(eval); 
+      
+      // Result တကယ်ပြောင်းသွားမှသာ setState ခေါ်၍ UI ကို Update လုပ်မည်။ (Performance အတွက်)
+      if (_calcResult != newResult || _isError) {
+        setState(() { 
+          _calcResult = newResult; 
+          _isError = false; 
+        });
+      }
     } catch (e) {
-      setState(() { _calcResult = 'Error'; _isError = true; });
+      // Error ကို ခဏခဏ မပြဘဲ တစ်ကြိမ်သာ ပြရန် ထိန်းချုပ်ထားသည်
+      if (!_isError) {
+        setState(() { _calcResult = 'Error'; _isError = true; });
+      }
     }
   }
 
@@ -97,29 +115,13 @@ class _AddTxSheetState extends State<AddTxSheet> {
     if (picked != null && picked != _selectedDate) setState(() => _selectedDate = picked);
   }
 
-  // အသစ်ထည့်သွင်းထားသော Icon ရွေးချယ်နိုင်သည့် Label Dialog
   void _showAddLabelDialog() {
     String newLabel = '';
-    int selectedIcon = 0xe163; // Default (Label Icon)
+    int selectedIcon = 0xe163; 
     
-    // User ရွေးချယ်နိုင်သော Icon လေးများ စာရင်း
     final List<int> iconList = [
-      0xe163, // label
-      0xe5fc, // shopping_bag
-      0xe25a, // fastfood
-      0xe532, // directions_car
-      0xe318, // home
-      0xe8f9, // work
-      0xe227, // attach_money
-      0xe53f, // local_hospital
-      0xe54c, // local_movies
-      0xe801, // flight
-      0xe333, // phone_android
-      0xe4fc, // pets
-      0xe556, // directions_bike
-      0xe156, // face
-      0xe54e, // local_offer
-      0xe8f6, // update
+      0xe163, 0xe5fc, 0xe25a, 0xe532, 0xe318, 0xe8f9, 0xe227, 0xe53f, 
+      0xe54c, 0xe801, 0xe333, 0xe4fc, 0xe556, 0xe156, 0xe54e, 0xe8f6,
     ];
 
     showDialog(
@@ -131,24 +133,16 @@ class _AddTxSheetState extends State<AddTxSheet> {
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  autofocus: true, 
-                  decoration: const InputDecoration(hintText: 'Enter name', border: OutlineInputBorder()), 
-                  onChanged: (val) => newLabel = val
-                ),
+                TextField(autofocus: true, decoration: const InputDecoration(hintText: 'Enter name', border: OutlineInputBorder()), onChanged: (val) => newLabel = val),
                 const SizedBox(height: 15),
                 const Align(alignment: Alignment.centerLeft, child: Text('Choose an Icon:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))),
                 const SizedBox(height: 10),
                 SizedBox(
-                  height: 180, // GridView အတွက် အမြင့်
+                  height: 180, 
                   width: double.maxFinite,
                   child: GridView.builder(
                     shrinkWrap: true,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                    ),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, crossAxisSpacing: 10, mainAxisSpacing: 10),
                     itemCount: iconList.length,
                     itemBuilder: (context, index) {
                       final iconCode = iconList[index];
@@ -156,11 +150,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
                       return GestureDetector(
                         onTap: () => setDialogState(() => selectedIcon = iconCode),
                         child: Container(
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.blueAccent.withOpacity(0.2) : Colors.transparent,
-                            border: Border.all(color: isSelected ? Colors.blueAccent : Colors.grey.withOpacity(0.3)),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                          decoration: BoxDecoration(color: isSelected ? Colors.blueAccent.withOpacity(0.2) : Colors.transparent, border: Border.all(color: isSelected ? Colors.blueAccent : Colors.grey.withOpacity(0.3)), borderRadius: BorderRadius.circular(10)),
                           child: Icon(IconData(iconCode, fontFamily: 'MaterialIcons'), color: isSelected ? Colors.blueAccent : Colors.grey),
                         ),
                       );
@@ -175,7 +165,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
                 onPressed: () {
                   if (newLabel.trim().isNotEmpty) {
-                    // iconData ပါ အတိအကျ ပေးပို့မည်
                     Provider.of<TrackerProvider>(context, listen: false).addNewCategory(newLabel.trim(), widget.txType, selectedIcon);
                     Navigator.pop(ctx);
                   }
