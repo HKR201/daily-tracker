@@ -108,10 +108,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
     if (_selectedSourceWallet == null) return;
 
     final provider = Provider.of<TrackerProvider>(context, listen: false);
-    
-    // Save လုပ်မည့်အခါ ကော်မာတွေကို ပြန်ဖြုတ်ပြီးမှ သိမ်းပါမည်
     double finalAmount = double.parse(_calcResult.replaceAll(',', ''));
-
     String finalTxType = widget.txType;
     int finalSourceId = _selectedSourceWallet!.id!;
 
@@ -127,18 +124,19 @@ class _AddTxSheetState extends State<AddTxSheet> {
     }
 
     int newTxId = await provider.addTransaction(
-      amount: finalAmount, type: finalTxType,
-      sourceWalletId: finalSourceId, categoryId: category.id!,
-      note: _noteCtrl.text, dateString: _selectedDate.toIso8601String(),
+      amount: finalAmount, type: finalTxType, sourceWalletId: finalSourceId, 
+      categoryId: category.id!, note: _noteCtrl.text, dateString: _selectedDate.toIso8601String(),
     );
     
     if (!mounted) return;
     Navigator.pop(context);
     
+    // SnackBar အလိုလိုမပျောက်သည့် ပြဿနာကို ဖြေရှင်းထားခြင်း
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${widget.title} Saved!'), 
-        duration: const Duration(seconds: 3), 
+        duration: const Duration(seconds: 2), // ၂ စက္ကန့်တိတိ
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20),
         backgroundColor: Colors.black87,
@@ -146,6 +144,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
       ),
     );
   }
+  
 
   @override
   Widget build(BuildContext context) {
