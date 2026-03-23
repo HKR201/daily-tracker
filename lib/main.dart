@@ -204,12 +204,11 @@ class VaultScreen extends StatefulWidget {
 class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin {
   late TabController _tab;
   bool _isOpen = false;
-  bool _isAssetsHidden = true; // Privacy အတွက် Asset Box ကို ဖျောက်ထားရန် 
+  bool _isAssetsHidden = true; 
 
   @override
   void initState() { 
     super.initState(); 
-    // Overview ကို ဖြုတ်လိုက်သဖြင့် Tab အရေအတွက် ၃ ခုသာ ရှိတော့မည်
     _tab = TabController(length: 3, vsync: this); 
     _tab.addListener(() => setState(() {})); 
   }
@@ -224,7 +223,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
         elevation: 0,
         bottom: TabBar(
           controller: _tab, 
-          isScrollable: false, // ၃ ခုတည်းဖြစ်သွားသဖြင့် အသေထားမည်
+          isScrollable: false, 
           labelColor: Colors.blueAccent, 
           unselectedLabelColor: Colors.grey, 
           indicatorColor: Colors.blueAccent,
@@ -238,7 +237,8 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
         ),
         if (_isOpen) GestureDetector(onTap: () => setState(() => _isOpen = false), child: Container(color: Colors.black26)),
       ]),
-      // More (Index 2) သို့ရောက်လျှင် FAB ဖျောက်မည်
+      // Animation မပါဘဲ ချက်ချင်းဖျောက်မည့် နေရာ
+      floatingActionButtonAnimator: FloatingActionButtonAnimator.noAnimation,
       floatingActionButton: _tab.index == 2 ? null : _buildFab(),
     );
   }
@@ -269,35 +269,39 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     ]);
   }
 
-  // Privacy Asset Box (နှိပ်မှ ပေါ်မည်)
+  // Premium Asset Box 
   Widget _buildAssetBox(TrackerProvider p) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
-      onTap: () => setState(() => _isAssetsHidden = !_isAssetsHidden), // အဖွင့်/အပိတ် ပြုလုပ်ရန်
+      onTap: () => setState(() => _isAssetsHidden = !_isAssetsHidden),
       child: Container(
-        padding: const EdgeInsets.all(15), 
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15), // ဘေးဘက် Padding နည်းနည်းပိုပေးထားသည်
         margin: const EdgeInsets.only(bottom: 15), 
         decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(15)), 
         child: Column(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Stack(
+              alignment: Alignment.center,
               children: [
-                const Text('Total Assets (စုစုပေါင်း ပိုင်ဆိုင်မှု)', style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(width: 8),
-                Icon(_isAssetsHidden ? Icons.visibility_off : Icons.visibility, color: Colors.blueAccent, size: 20),
+                const Text('Total Assets (စုစုပေါင်း ပိုင်ဆိုင်မှု)', textAlign: TextAlign.center, style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Icon(_isAssetsHidden ? Icons.visibility_off : Icons.visibility, color: Colors.blueAccent, size: 22),
+                ),
               ],
             ),
-            // _isAssetsHidden က False ဖြစ်မှ (ဆိုလိုသည်မှာ မျက်စိဖွင့်မှ) အောက်က Data များကို ပြမည်
             if (!_isAssetsHidden) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 15),
               Text('${p.formatLakh(p.totalAssets)} Ks', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-              const Divider(),
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 15),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround, 
                 children: p.wallets.map((w) => Column(children: [
-                  Text(w.name, style: const TextStyle(fontSize: 12)), 
-                  Text(p.formatLakh(w.amount), style: const TextStyle(fontWeight: FontWeight.bold))
+                  Text(w.name, style: const TextStyle(fontSize: 13, color: Colors.grey)), 
+                  const SizedBox(height: 5),
+                  Text(p.formatLakh(w.amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))
                 ])).toList()
               ),
             ]
