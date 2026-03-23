@@ -10,10 +10,11 @@ class TrackerProvider extends ChangeNotifier {
   List<AppTransaction> transactions = [];
   bool isLoading = true;
   bool isLakhEnabled = true;
-  bool isDarkMode = false;
+  
+  // 🌟 FIX: System Dark Mode အား အထောက်အပံ့ပေးရန် ThemeMode ကို အသုံးပြုထားသည်
+  ThemeMode themeMode = ThemeMode.system;
+  
   String lastSyncTime = "Never";
-
-  // ခေါင်းစဉ်နာမည်များအတွက် Variable အသစ်များ (စကင်ဖတ်ထားသည့်အတိုင်း)
   String hubTitle = 'The Daily Hub';
   String vaultTitle = 'The Vault';
 
@@ -22,10 +23,12 @@ class TrackerProvider extends ChangeNotifier {
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
     isLakhEnabled = prefs.getBool('isLakhEnabled') ?? true;
-    isDarkMode = prefs.getBool('isDarkMode') ?? false;
     lastSyncTime = prefs.getString('lastSyncTime') ?? "Never";
     
-    // ခေါင်းစဉ်များကို ဖုန်း Memory မှ ပြန်ခေါ်ခြင်း
+    // ThemeMode ကို Load လုပ်ခြင်း (0: System, 1: Light, 2: Dark)
+    int themeIndex = prefs.getInt('themeMode') ?? 0;
+    themeMode = ThemeMode.values[themeIndex];
+
     hubTitle = prefs.getString('hubTitle') ?? 'The Daily Hub';
     vaultTitle = prefs.getString('vaultTitle') ?? 'The Vault';
     
@@ -58,14 +61,14 @@ class TrackerProvider extends ChangeNotifier {
     isLoading = false; notifyListeners();
   }
 
-  void toggleTheme() async {
-    isDarkMode = !isDarkMode;
+  // 🌟 FIX: Theme ကို System, Light, Dark ပြောင်းပေးမည့် Function
+  void setThemeMode(ThemeMode mode) async {
+    themeMode = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isDarkMode', isDarkMode);
+    await prefs.setInt('themeMode', mode.index);
     notifyListeners();
   }
 
-  // ခေါင်းစဉ်များကို ပြင်ဆင်ရန် Function အသစ်များ
   Future<void> updateHubTitle(String newTitle) async {
     hubTitle = newTitle;
     (await SharedPreferences.getInstance()).setString('hubTitle', newTitle);
@@ -78,14 +81,12 @@ class TrackerProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // အိတ်ကပ်နာမည်များကို ပြင်ဆင်ရန် Function အသစ်
   Future<void> renameWallet(int id, String newName) async {
     final db = await DatabaseHelper.instance.database;
     await db.update('wallets', {'name': newName}, where: 'id = ?', whereArgs: [id]);
-    await loadAllData(); // Data အသစ်ပြန်ခေါ်၍ UI ကို Update လုပ်မည်
+    await loadAllData(); 
   }
 
-  // Label အသစ်လုပ်လျှင် Icon ပါ ရွေးချယ်နိုင်ရန် Parameter (iconData) ကို ထပ်တိုးထားသည်
   Future<void> addNewCategory(String name, String type, int iconData) async {
     final db = await DatabaseHelper.instance.database;
     await db.insert('categories', {'name': name, 'icon_data': iconData, 'type': type});
@@ -138,7 +139,6 @@ class TrackerProvider extends ChangeNotifier {
   }
 
   Future<void> updateTransaction(AppTransaction oldTx, {required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
-    
     if (oldTx.type == 'BankDeposit' || oldTx.type == 'HusbandDeposit' || oldTx.type == 'IncomeFromBank' || oldTx.type == 'IncomeFromHusband') {
       await _adjustWallet(oldTx.sourceWalletId, oldTx.amount); 
       await _adjustWallet(oldTx.destinationWalletId!, -oldTx.amount);
@@ -180,6 +180,21 @@ class TrackerProvider extends ChangeNotifier {
       double currentAmount = res.first['amount'];
       await db.update('wallets', {'amount': currentAmount + amount}, where: 'id = ?', whereArgs: [id]);
     }
+  }
+
+  // 🌟 FIX: (Point 4) Ledger စာမျက်နှာအတွက် Filter အလုပ်များကို Provider ကသာ တာဝန်ယူပေးမည်
+  List<AppTransaction> getFilteredTransactions(String selectedLabel, String filterType, DateTime selectedDate) {
+    return transactions.where((tx) {
+      final cat = categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0, type: 'Expense'));
+      if (selectedLabel != 'All' && cat.name != selectedLabel) return false;
+
+      if (filterType == 'All') return true;
+      DateTime d = DateTime.parse(tx.dateTimestamp); 
+      if (filterType == 'Year') return d.year == selectedDate.year;
+      if (filterType == 'Month') return d.year == selectedDate.year && d.month == selectedDate.month;
+      if (filterType == 'Day') return d.year == selectedDate.year && d.month == selectedDate.month && d.day == selectedDate.day;
+      return true;
+    }).toList();
   }
 
   String formatLakh(double amount) {
