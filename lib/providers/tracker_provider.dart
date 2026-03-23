@@ -30,6 +30,13 @@ class TrackerProvider extends ChangeNotifier {
     isLoading = false; notifyListeners();
   }
 
+  // Label (Category) အသစ်ထည့်ရန် - ဒီနေရာမှာ နာမည်လွဲနေတာကို ပြင်လိုက်ပါပြီ
+  Future<void> addNewCategory(String name, String type) async {
+    final db = await DatabaseHelper.instance.database;
+    await db.insert('categories', {'name': name, 'icon_data': 0xe163, 'type': type});
+    await loadAllData();
+  }
+
   Future<int> addTransaction({required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
     final db = await DatabaseHelper.instance.database;
     int? destId;
@@ -67,7 +74,6 @@ class TrackerProvider extends ChangeNotifier {
     return NumberFormat('#,###').format(amount);
   }
 
-  // Monthly / Yearly Summary Logic
   Map<String, double> getSummaryByTypeAndCategory(String period, String typeGroup) {
     DateTime now = DateTime.now();
     var filtered = transactions.where((tx) {
@@ -85,6 +91,7 @@ class TrackerProvider extends ChangeNotifier {
   }
 
   double getPeriodTotal(String period, String typeGroup) => getSummaryByTypeAndCategory(period, typeGroup).values.fold(0.0, (a, b) => a + b);
+  
   double get currentMonthExpense {
     DateTime now = DateTime.now();
     return transactions.where((tx) {
@@ -92,8 +99,10 @@ class TrackerProvider extends ChangeNotifier {
       return d.year == now.year && d.month == now.month && (tx.type == 'Expense' || tx.type == 'HomeTransfer');
     }).fold(0.0, (sum, tx) => sum + tx.amount);
   }
+
   double get totalAssets => wallets.fold(0.0, (sum, item) => sum + item.amount);
   double get totalBalance => wallets.where((w) => w.type == 'Balance').fold(0.0, (sum, item) => sum + item.amount);
+  
   void toggleLakh(bool val) async { isLakhEnabled = val; (await SharedPreferences.getInstance()).setBool('isLakhEnabled', val); notifyListeners(); }
   void updateSyncTime() async { lastSyncTime = DateFormat('dd-MM-yyyy HH:mm').format(DateTime.now()); (await SharedPreferences.getInstance()).setString('lastSyncTime', lastSyncTime); notifyListeners(); }
 }
