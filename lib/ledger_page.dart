@@ -3,62 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/tracker_provider.dart';
 import '../models/app_models.dart';
-import '../widgets/add_tx_sheet.dart'; // Edit လုပ်ရန် Form ကို လှမ်းခေါ်ရန်
-
-// ညာဘက်ဆွဲလျှင် Delete Icon ပေါ်ပြီး ထပ်နှိပ်မှဖျက်မည့် Custom Widget (Ledger အတွက် သီးသန့်)
-class SwipeToDeleteLedgerItem extends StatefulWidget {
-  final Widget child;
-  final VoidCallback onDelete;
-  const SwipeToDeleteLedgerItem({super.key, required this.child, required this.onDelete});
-
-  @override
-  State<SwipeToDeleteLedgerItem> createState() => _SwipeToDeleteLedgerItemState();
-}
-
-class _SwipeToDeleteLedgerItemState extends State<SwipeToDeleteLedgerItem> {
-  double _dragExtent = 0;
-  final double _maxDrag = 80;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onHorizontalDragUpdate: (details) {
-        setState(() {
-          _dragExtent -= details.primaryDelta!;
-          if (_dragExtent < 0) _dragExtent = 0;
-          if (_dragExtent > _maxDrag) _dragExtent = _maxDrag;
-        });
-      },
-      onHorizontalDragEnd: (details) {
-        setState(() => _dragExtent = (_dragExtent > _maxDrag / 2) ? _maxDrag : 0);
-      },
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: Container(
-              color: Colors.redAccent,
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: () {
-                  setState(() => _dragExtent = 0);
-                  widget.onDelete(); // တကယ်ဖျက်မည့် နေရာ
-                },
-                child: Container(width: _maxDrag, alignment: Alignment.center, child: const Icon(Icons.delete, color: Colors.white)),
-              ),
-            ),
-          ),
-          Transform.translate(
-            offset: Offset(-_dragExtent, 0),
-            child: Container(color: Theme.of(context).scaffoldBackgroundColor, child: widget.child),
-          ),
-        ],
-      ),
-    );
-  }
-}
+import '../widgets/add_tx_sheet.dart'; 
 
 class LedgerPage extends StatefulWidget {
-  final String initialLabel; // Vault မှ ဝင်လာလျှင် ပါလာမည့် Label
+  final String initialLabel; 
   const LedgerPage({super.key, required this.initialLabel});
 
   @override
@@ -67,7 +15,7 @@ class LedgerPage extends StatefulWidget {
 
 class _LedgerPageState extends State<LedgerPage> {
   String _selectedLabel = 'All';
-  String _filterType = 'All'; // 'All', 'Year', 'Month', 'Day'
+  String _filterType = 'All'; 
   DateTime _selectedDate = DateTime.now();
 
   @override
@@ -76,7 +24,6 @@ class _LedgerPageState extends State<LedgerPage> {
     _selectedLabel = widget.initialLabel;
   }
 
-  // အချိန်ရွေးချယ်မည့် Dialog
   Future<void> _pickTimeFilter(BuildContext context) async {
     showModalBottomSheet(
       context: context,
@@ -122,7 +69,6 @@ class _LedgerPageState extends State<LedgerPage> {
     );
   }
 
-  // Edit Form ပွင့်လာစေမည့် Function
   void _openEditSheet(AppTransaction tx, AppCategory cat) {
     showModalBottomSheet(
       context: context,
@@ -133,16 +79,11 @@ class _LedgerPageState extends State<LedgerPage> {
           color: Theme.of(context).scaffoldBackgroundColor, 
           borderRadius: const BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))
         ),
-        child: AddTxSheet(
-          txType: cat.type, // Expense, Income စသည့် မူလအမျိုးအစား
-          title: 'Record',
-          existingTx: tx, // စာရင်းဟောင်းကို ထည့်ပေးလိုက်ပါသည် (Edit Mode ဖြစ်သွားမည်)
-        ),
+        child: AddTxSheet(txType: cat.type, title: 'Record', existingTx: tx),
       )
     );
   }
 
-  // Filter ၏ ခေါင်းစဉ်စာသားကို ဖော်ပြရန်
   String get _timeFilterText {
     if (_filterType == 'All') return 'All Time';
     if (_filterType == 'Year') return DateFormat('yyyy').format(_selectedDate);
@@ -151,7 +92,6 @@ class _LedgerPageState extends State<LedgerPage> {
     return 'All Time';
   }
 
-  // အိတ်ကပ်အမည် ပြန်ရှာပေးမည့် Helper
   String _getWalletName(int walletId, List<AppWallet> wallets) {
     try {
       return wallets.firstWhere((w) => w.id == walletId).name;
@@ -165,25 +105,9 @@ class _LedgerPageState extends State<LedgerPage> {
     final p = Provider.of<TrackerProvider>(context);
     final currencyFormat = NumberFormat('#,###');
 
-    // 1. Data များကို Label နှင့် အချိန်အလိုက် စစ်ထုတ်ခြင်း (Filtering Logic)
-    final filteredList = p.transactions.where((tx) {
-      final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0, type: 'Expense'));
-      bool labelOk = (_selectedLabel == 'All') || (cat.name == _selectedLabel);
+    // 🌟 OPTIMIZATION: Build အတွင်း တွက်ချက်ခြင်းများကို ဖယ်ရှားပြီး Provider ထဲမှ တိုက်ရိုက်ခေါ်ယူသည်
+    final filteredList = p.getFilteredTransactions(_selectedLabel, _filterType, _selectedDate);
 
-      DateTime d = DateTime.parse(tx.dateTimestamp);
-      bool timeOk = true;
-      if (_filterType == 'Year') {
-        timeOk = (d.year == _selectedDate.year);
-      } else if (_filterType == 'Month') {
-        timeOk = (d.year == _selectedDate.year && d.month == _selectedDate.month);
-      } else if (_filterType == 'Day') {
-        timeOk = (d.year == _selectedDate.year && d.month == _selectedDate.month && d.day == _selectedDate.day);
-      }
-
-      return labelOk && timeOk;
-    }).toList();
-
-    // 2. စစ်ထုတ်ထားသော Data များ၏ စုစုပေါင်းပမာဏကို တွက်ခြင်း
     double totalAmount = filteredList.fold(0.0, (sum, item) => sum + item.amount);
 
     return Scaffold(
@@ -193,7 +117,6 @@ class _LedgerPageState extends State<LedgerPage> {
       ),
       body: Column(
         children: [
-          // Filter Bar Section
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Theme.of(context).brightness == Brightness.dark ? Colors.black12 : Colors.white,
@@ -224,7 +147,6 @@ class _LedgerPageState extends State<LedgerPage> {
             ),
           ),
 
-          // Total Summary Card
           Container(
             padding: const EdgeInsets.all(20),
             width: double.infinity,
@@ -241,7 +163,6 @@ class _LedgerPageState extends State<LedgerPage> {
             ),
           ),
 
-          // Transaction List
           Expanded(
             child: filteredList.isEmpty 
               ? const Center(child: Text('No records found (မှတ်တမ်းမရှိပါ)', style: TextStyle(color: Colors.grey))) 
@@ -252,14 +173,22 @@ class _LedgerPageState extends State<LedgerPage> {
                 bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
                 final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
                 
-                // အိတ်ကပ်နာမည် ပြသရန်ရှာဖွေခြင်း
                 String walletName = _getWalletName(tx.sourceWalletId, p.wallets);
                 String noteText = tx.note.isNotEmpty ? ' • ${tx.note}' : '';
                 String displayDate = DateFormat('dd MMM yyyy').format(DateTime.parse(tx.dateTimestamp));
 
-                return SwipeToDeleteLedgerItem(
-                  onDelete: () {
-                    p.deleteTransaction(tx.id!); // ဖျက်မည်
+                // 🌟 UI/UX FIX: Flutter's Built-in Dismissible ကို အသုံးပြုထားသည်
+                return Dismissible(
+                  key: Key(tx.id.toString()),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    color: Colors.redAccent,
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  onDismissed: (direction) {
+                    p.deleteTransaction(tx.id!);
                     
                     ScaffoldMessenger.of(context).clearSnackBars();
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -270,20 +199,19 @@ class _LedgerPageState extends State<LedgerPage> {
                         action: SnackBarAction(
                           label: 'UNDO', 
                           textColor: Colors.blueAccent, 
-                          onPressed: () => p.undoDelete(tx) // Redo လုပ်မည်
+                          onPressed: () => p.undoDelete(tx)
                         ),
                       )
                     );
                   },
                   child: InkWell(
-                    onTap: () => _openEditSheet(tx, cat), // နှိပ်လျှင် Edit ပွင့်မည်
+                    onTap: () => _openEditSheet(tx, cat),
                     child: ListTile(
                       leading: CircleAvatar(
                         backgroundColor: isExp ? Colors.red.withOpacity(0.1) : Colors.green.withOpacity(0.1), 
                         child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: isExp ? Colors.redAccent : Colors.green)
                       ),
                       title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      // အိတ်ကပ်နာမည် • နေ့စွဲ • မှတ်စု ပုံစံဖြင့် ပြသခြင်း
                       subtitle: Text('$walletName • $displayDate$noteText'),
                       trailing: Text('${isExp ? '-' : '+'}${currencyFormat.format(tx.amount)}', style: TextStyle(color: isExp ? Colors.redAccent : Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
