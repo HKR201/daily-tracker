@@ -34,8 +34,16 @@ jobs:
           flutter create app_workspace --org com.tkr --project-name daily_tracker
           cp -r lib/* app_workspace/lib/
           cp pubspec.yaml app_workspace/
+          
+          # 🌟 FIX: Logo ပုံပါဝင်သော assets ဖိုင်တွဲကိုပါ app_workspace သို့ ကူးယူမည်
+          cp -r assets app_workspace/ || true 
+          
           cd app_workspace
           flutter pub get
+          
+          # 🌟 FIX: APK မထုတ်ခင် App Icon ကို အရင် Generate လုပ်ခိုင်းမည်
+          flutter pub run flutter_launcher_icons
+          
           flutter build apk --release --no-tree-shake-icons
 
       - name: Create Key, Sign APK and Get SHA-1
