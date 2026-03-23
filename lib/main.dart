@@ -52,6 +52,58 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
+// 🌟 Custom Swipe To Delete System
+class SwipeToDeleteItem extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDelete;
+  const SwipeToDeleteItem({super.key, required this.child, required this.onDelete});
+
+  @override
+  State<SwipeToDeleteItem> createState() => _SwipeToDeleteItemState();
+}
+
+class _SwipeToDeleteItemState extends State<SwipeToDeleteItem> {
+  double _dragExtent = 0;
+  final double _maxDrag = 80;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: (details) {
+        setState(() {
+          _dragExtent -= details.primaryDelta!;
+          if (_dragExtent < 0) _dragExtent = 0;
+          if (_dragExtent > _maxDrag) _dragExtent = _maxDrag;
+        });
+      },
+      onHorizontalDragEnd: (details) {
+        setState(() => _dragExtent = (_dragExtent > _maxDrag / 2) ? _maxDrag : 0);
+      },
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              color: Colors.redAccent,
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _dragExtent = 0);
+                  widget.onDelete(); // အမှိုက်ပုံးခလုတ်ကို သေချာနှိပ်မှ ဖျက်မည်
+                },
+                child: Container(width: _maxDrag, alignment: Alignment.center, child: const Icon(Icons.delete, color: Colors.white)),
+              ),
+            ),
+          ),
+          Transform.translate(
+            offset: Offset(-_dragExtent, 0),
+            child: Container(color: Theme.of(context).scaffoldBackgroundColor, child: widget.child),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ==========================================
 // DAILY HUB SCREEN
 // ==========================================
@@ -97,16 +149,8 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                   bool isExp = ['Expense', 'HomeTransfer', 'BankDeposit', 'HusbandDeposit'].contains(tx.type);
                   final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
                   
-                  return Dismissible(
-                    key: Key(tx.id.toString()),
-                    direction: DismissDirection.endToStart,
-                    background: Container(
-                      color: Colors.redAccent,
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      child: const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    onDismissed: (direction) {
+                  return SwipeToDeleteItem(
+                    onDelete: () {
                       p.deleteTransaction(tx.id!);
                       ScaffoldMessenger.of(context).clearSnackBars();
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Record deleted'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, action: SnackBarAction(label: 'UNDO', textColor: Colors.blueAccent, onPressed: () => p.undoDelete(tx))));
