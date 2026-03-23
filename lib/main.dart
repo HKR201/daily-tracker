@@ -351,7 +351,6 @@ class _SettingsViewState extends State<SettingsView> {
   bool _isSyncing = false;
   bool _isResetting = false;
 
-  // နာမည်ပြင်ဆင်ရန်အတွက် သုံးသည့် Dialog Function
   void _showRenameDialog(String title, String initialValue, Function(String) onSave) {
     String newVal = initialValue;
     showDialog(
@@ -404,7 +403,7 @@ class _SettingsViewState extends State<SettingsView> {
         ),
         const SizedBox(height: 30),
 
-        // ၂။ Personalization (စိတ်ကြိုက် နာမည်များ ပြင်ရန်)
+        // ၂။ Personalization (နာမည်များ ပြင်ရန်)
         const Text('Personalization (နာမည်များ ပြင်ဆင်ရန်)', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 10),
         Container(
@@ -435,4 +434,46 @@ class _SettingsViewState extends State<SettingsView> {
         Container(
           decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.white, borderRadius: BorderRadius.circular(15)),
           child: Column(
-            chil
+            children: [
+              ListTile(leading: const Icon(Icons.cloud_upload, color: Colors.blueAccent), title: const Text('Backup to Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('Last synced: ${provider.lastSyncTime}'), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.backupDatabase(); provider.updateSyncTime(); setState(() => _isSyncing = false); }),
+              const Divider(height: 1),
+              ListTile(leading: const Icon(Icons.cloud_download, color: Colors.green), title: const Text('Restore from Google Drive', style: TextStyle(fontWeight: FontWeight.bold)), trailing: _isSyncing ? const CircularProgressIndicator() : const Icon(Icons.chevron_right), onTap: () async { setState(() => _isSyncing = true); await _driveService.restoreDatabase(); provider.loadAllData(); setState(() => _isSyncing = false); }),
+              const Divider(height: 1),
+              // Reset ခလုတ်
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.redAccent), 
+                title: const Text('Reset Cloud Backup', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)), 
+                trailing: _isResetting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.redAccent, strokeWidth: 2)) : const Icon(Icons.chevron_right, color: Colors.redAccent), 
+                onTap: () async {
+                  bool? confirm = await showDialog(context: context, builder: (ctx) => AlertDialog(
+                    title: const Text('Are you sure?', style: TextStyle(fontWeight: FontWeight.bold)),
+                    content: const Text('This will permanently delete your cloud backup.\n\nYou will need to choose your Google account again to verify.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+                      ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent), onPressed: () => Navigator.pop(ctx, true), child: const Text('Reset', style: TextStyle(color: Colors.white))),
+                    ],
+                  ));
+                  
+                  if (confirm == true) {
+                    setState(() => _isResetting = true);
+                    bool success = await _driveService.resetCloudBackup();
+                    if (success) {
+                      final prefs = await SharedPreferences.getInstance();
+                      await prefs.setString('lastSyncTime', 'Never');
+                      provider.lastSyncTime = 'Never';
+                      provider.loadAllData();
+                    }
+                    setState(() => _isResetting = false);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success ? 'Cloud Backup has been reset.' : 'Failed to reset backup.')));
+                    }
+                  }
+                }
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
