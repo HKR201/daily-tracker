@@ -8,7 +8,7 @@ import '../models/app_models.dart';
 class AddTxSheet extends StatefulWidget {
   final String txType; 
   final String title;
-  final AppTransaction? existingTx; // ပြင်ဆင်ရန်အတွက် စာရင်းဟောင်း လက်ခံမည့် နေရာ
+  final AppTransaction? existingTx; 
 
   const AddTxSheet({super.key, required this.txType, required this.title, this.existingTx});
 
@@ -35,14 +35,12 @@ class _AddTxSheetState extends State<AddTxSheet> {
       final provider = Provider.of<TrackerProvider>(context, listen: false);
       setState(() {
         if (widget.existingTx != null) {
-          // Edit Mode (စာရင်းဟောင်းရှိလျှင် အသင့်ဖြည့်ပေးမည်)
           _calcResult = NumberFormat('#,###.##').format(widget.existingTx!.amount);
           _amountCtrl.text = _calcResult;
           _noteCtrl.text = widget.existingTx!.note;
           _showNote = widget.existingTx!.note.isNotEmpty;
           _selectedDate = DateTime.parse(widget.existingTx!.dateTimestamp);
 
-          // ဝင်ငွေ အမျိုးအစားအလိုက် အိတ်ကပ်ကို အမှန်ပြန်ရွေးပေးခြင်း
           if (widget.existingTx!.type == 'Income') {
             _selectedSourceWallet = _externalWallet;
           } else if (widget.existingTx!.type == 'IncomeFromBank') {
@@ -50,7 +48,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
           } else if (widget.existingTx!.type == 'IncomeFromHusband') {
             _selectedSourceWallet = provider.wallets.firstWhere((w) => w.type == 'Person');
           } else {
-            // ကျန်သောအထွေထွေ အိတ်ကပ်များ
             try {
               _selectedSourceWallet = provider.wallets.firstWhere((w) => w.id == widget.existingTx!.sourceWalletId);
             } catch (e) {
@@ -58,7 +55,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
             }
           }
         } else {
-          // Add Mode (စာရင်းအသစ် ထည့်သွင်းခြင်း)
           if (widget.txType == 'Income') {
             _selectedSourceWallet = _externalWallet;
           } else if (provider.wallets.isNotEmpty) {
@@ -147,7 +143,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
 
     int newTxId = 0;
     
-    // ပြင်ဆင်ခြင်းလား (သို့) အသစ်ထည့်ခြင်းလား စစ်ဆေး၍ သိမ်းဆည်းမည်
     if (widget.existingTx != null) {
       await provider.updateTransaction(
         widget.existingTx!, 
@@ -173,7 +168,6 @@ class _AddTxSheetState extends State<AddTxSheet> {
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20),
         backgroundColor: Colors.black87,
-        // Update လုပ်တဲ့အခါ Undo ခလုတ် မပြပါ (အသစ်သွင်းမှသာ Undo ပြမည်)
         action: widget.existingTx != null ? null : SnackBarAction(label: 'UNDO', textColor: Colors.redAccent, onPressed: () => provider.deleteTransaction(newTxId))
       ),
     );
@@ -190,7 +184,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
       availableWallets = [_externalWallet, ...provider.wallets.where((w) => w.type == 'Bank' || w.type == 'Person')];
     } else {
       availableWallets = provider.wallets.where((w) {
-        if (widget.txType == 'BankDeposit' && w.wtype == 'Bank') return false;
+        if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false; // Fix applied here (w.type)
         if (widget.txType == 'HusbandDeposit' && w.type == 'Person') return false;
         return true;
       }).toList();
