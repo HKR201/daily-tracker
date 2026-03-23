@@ -22,14 +22,12 @@ class TrackerProvider extends ChangeNotifier {
     lastSyncTime = prefs.getString('lastSyncTime') ?? "Never";
     await loadAllData();
 
-    // အိတ်ကပ် ၃ မျိုး မရှိသေးလျှင် ထည့်ပေးမည်
     if (wallets.isEmpty) {
       await addWallet(AppWallet(name: 'Balance', type: 'Balance', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
       await addWallet(AppWallet(name: 'ဘဏ်စာရင်း', type: 'Bank', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
       await addWallet(AppWallet(name: 'ယောကျ်ားစာရင်း', type: 'Person', amount: 0.0, lastUpdated: DateTime.now().toIso8601String()));
     }
     
-    // Category Label များ မရှိသေးလျှင် ထည့်ပေးမည်
     if (categories.isEmpty) {
       final db = await DatabaseHelper.instance.database;
       await db.insert('categories', {'name': 'Foods & Drinks', 'icon_data': 0xe25a, 'type': 'Expense'});
@@ -70,10 +68,10 @@ class TrackerProvider extends ChangeNotifier {
 
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId, amount);
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
     } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId, amount);
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
     } else if (type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
       _adjustWallet(balId, amount);
@@ -99,7 +97,6 @@ class TrackerProvider extends ChangeNotifier {
     await loadAllData();
   }
 
-  // UNDO စနစ် (ဖျက်လိုက်သည်ကို ပြန်လည် ထည့်သွင်းခြင်း)
   Future<void> undoDelete(AppTransaction oldTx) async {
     await addTransaction(
       amount: oldTx.amount, type: oldTx.type, sourceWalletId: oldTx.sourceWalletId,
@@ -107,10 +104,8 @@ class TrackerProvider extends ChangeNotifier {
     );
   }
 
-  // စာရင်း ပြင်ဆင်ခြင်း (EDIT TRANSACTION) စနစ်အသစ်
   Future<void> updateTransaction(AppTransaction oldTx, {required double amount, required String type, required int sourceWalletId, required int categoryId, required String note, required String dateString}) async {
     
-    // အဆင့် ၁။ အဟောင်းကို ပြန်နုတ်မည် (Reverse old transaction)
     if (oldTx.type == 'BankDeposit' || oldTx.type == 'HusbandDeposit' || oldTx.type == 'IncomeFromBank' || oldTx.type == 'IncomeFromHusband') {
       _adjustWallet(oldTx.sourceWalletId, oldTx.amount); _adjustWallet(oldTx.destinationWalletId!, -oldTx.amount);
     } else if (oldTx.type == 'Income') {
@@ -120,14 +115,13 @@ class TrackerProvider extends ChangeNotifier {
       _adjustWallet(oldTx.sourceWalletId, oldTx.amount);
     }
 
-    // အဆင့် ၂။ အသစ်ကို ပေါင်းထည့်မည် (Apply new transaction)
     int? destWalletId;
     if (type == 'IncomeFromBank' || type == 'IncomeFromHusband') {
       destWalletId = wallets.firstWhere((w) => w.type == 'Balance').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId, amount);
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
     } else if (type == 'BankDeposit' || type == 'HusbandDeposit') {
       destWalletId = type == 'BankDeposit' ? wallets.firstWhere((w) => w.type == 'Bank').id : wallets.firstWhere((w) => w.type == 'Person').id;
-      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId, amount);
+      _adjustWallet(sourceWalletId, -amount); _adjustWallet(destWalletId!, amount); // Fix applied here
     } else if (type == 'Income') {
       int balId = wallets.firstWhere((w) => w.type == 'Balance').id!;
       _adjustWallet(balId, amount);
@@ -135,7 +129,6 @@ class TrackerProvider extends ChangeNotifier {
       _adjustWallet(sourceWalletId, -amount);
     }
 
-    // အဆင့် ၃။ Database တွင် အဟောင်းနေရာ၌ အသစ်ကို အစားထိုး သိမ်းဆည်းမည် (Update DB)
     final db = await DatabaseHelper.instance.database;
     await db.update('transactions', 
       AppTransaction(id: oldTx.id, amount: amount, type: type, sourceWalletId: sourceWalletId, destinationWalletId: destWalletId, categoryId: categoryId, note: note, dateTimestamp: dateString).toMap(),
