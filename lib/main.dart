@@ -225,11 +225,27 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     final outSum = p.getSummaryByTypeAndCategory(period, 'Out');
     return ListView(padding: const EdgeInsets.all(15), children: [
       _buildAssetBox(p),
-      ExpansionTile(title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})'), children: inSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key))))).toList()),
-      ExpansionTile(title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})'), children: outSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text(p.formatLakh(e.value)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(title: period, filterCategory: e.key))))).toList()),
+      ExpansionTile(
+        title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})'), 
+        children: inSum.entries.map((e) => ListTile(
+          title: Text(e.key), 
+          trailing: Text(p.formatLakh(e.value)), 
+          // ဒီနေရာမှာ initialLabel: e.key ဆိုပြီး အမှန်ပြင်ပေးထားပါသည်
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key)))
+        )).toList()
+      ),
+      ExpansionTile(
+        title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})'), 
+        children: outSum.entries.map((e) => ListTile(
+          title: Text(e.key), 
+          trailing: Text(p.formatLakh(e.value)), 
+          // ဒီနေရာမှာ initialLabel: e.key ဆိုပြီး အမှန်ပြင်ပေးထားပါသည်
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key)))
+        )).toList()
+      ),
     ]);
   }
-
+  
   Widget _buildAssetBox(TrackerProvider p) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(padding: const EdgeInsets.all(15), margin: const EdgeInsets.only(bottom: 15), decoration: BoxDecoration(color: isDark ? Colors.blueGrey.withOpacity(0.2) : Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(15)), child: Column(children: [
