@@ -30,7 +30,7 @@ class _AddTxSheetState extends State<AddTxSheet> {
       final p = Provider.of<TrackerProvider>(context, listen: false);
       setState(() {
         if (widget.txType == 'Income') _selectedSourceWallet = _externalWallet;
-        else if (p.wallets.isNotEmpty) _selectedSourceWallet = p.wallets.firstWhere((w) => w.type == 'Balance');
+        else _selectedSourceWallet = p.wallets.firstWhere((w) => w.type == 'Balance');
       });
     });
   }
@@ -54,29 +54,17 @@ class _AddTxSheetState extends State<AddTxSheet> {
 
   void _showAddLabelDialog() {
     String newLabel = '';
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add New Label'),
-        content: TextField(autofocus: true, onChanged: (val) => newLabel = val),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              if (newLabel.trim().isNotEmpty) {
-                Provider.of<TrackerProvider>(context, listen: false).addNewCategory(newLabel.trim(), widget.txType);
-                Navigator.pop(ctx);
-              }
-            }, 
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Add New Label'),
+      content: TextField(autofocus: true, onChanged: (v) => newLabel = v),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), ElevatedButton(onPressed: () {
+        if (newLabel.trim().isNotEmpty) { Provider.of<TrackerProvider>(context, listen: false).addNewCategory(newLabel.trim(), widget.txType); Navigator.pop(ctx); }
+      }, child: const Text('Add'))],
+    ));
   }
 
   void _saveWithCategory(AppCategory category) async {
-    if (_calcResult.isEmpty || _calcResult == 'Error' || _calcResult == '0') return;
+    if (_calcResult.isEmpty || _calcResult == 'Error') return;
     final p = Provider.of<TrackerProvider>(context, listen: false);
     double amount = double.parse(_calcResult.replaceAll(',', ''));
     String finalType = widget.txType;
@@ -88,11 +76,11 @@ class _AddTxSheetState extends State<AddTxSheet> {
       else if (_selectedSourceWallet!.type == 'Person') finalType = 'IncomeFromHusband';
     }
 
-    int id = await p.addTransaction(amount: amount, type: finalType, sourceWalletId: sourceId, categoryId: category.id!, note: _noteCtrl.text, dateString: _selectedDate.toIso8601String());
+    await p.addTransaction(amount: amount, type: finalType, sourceWalletId: sourceId, categoryId: category.id!, note: _noteCtrl.text, dateString: _selectedDate.toIso8601String());
     if (!mounted) return;
     Navigator.pop(context);
     ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.title} Saved!'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.title} Saved!'), duration: const Duration(seconds: 2), behavior: SnackBarBehavior.floating, margin: const EdgeInsets.only(bottom: 80, left: 20, right: 20)));
   }
 
   @override
@@ -101,34 +89,34 @@ class _AddTxSheetState extends State<AddTxSheet> {
     final cats = provider.categories.where((c) => c.type == widget.txType).toList();
     final color = (widget.txType == 'Expense' || widget.txType == 'HomeTransfer') ? Colors.redAccent : Colors.blueAccent;
 
+    List<AppWallet> wallets = (widget.txType == 'Income') 
+        ? [_externalWallet, ...provider.wallets.where((w) => w.type != 'Balance')] 
+        : provider.wallets.where((w) {
+            if (widget.txType == 'BankDeposit' && w.type == 'Bank') return false;
+            if (widget.txType == 'HusbandDeposit' && w.type == 'Person') return false;
+            return true;
+          }).toList();
+
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 20),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 15),
-            TextField(controller: _amountCtrl, keyboardType: TextInputType.phone, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold), onChanged: _evaluateMath, decoration: InputDecoration(labelText: 'Amount', suffixText: '= $_calcResult')),
-            const SizedBox(height: 15),
-            DropdownButtonFormField<AppWallet>(
-              value: _selectedSourceWallet,
-              items: (widget.txType == 'Income' ? [_externalWallet, ...provider.wallets.where((w) => w.type != 'Balance')] : provider.wallets).map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
-              onChanged: (val) => setState(() => _selectedSourceWallet = val),
-              decoration: const InputDecoration(labelText: 'From/To'),
-            ),
-            const SizedBox(height: 20),
-            Wrap(
-              spacing: 8, runSpacing: 8,
-              children: [
-                ...cats.map((c) => ActionChip(label: Text(c.name), onPressed: () => _saveWithCategory(c))),
-                ActionChip(backgroundColor: Colors.grey[200], label: const Text('+ Add'), onPressed: _showAddLabelDialog),
-              ],
-            ),
-            const SizedBox(height: 30),
-          ],
+      child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(widget.title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+        const SizedBox(height: 15),
+        TextField(controller: _amountCtrl, keyboardType: TextInputType.phone, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold), onChanged: _evaluateMath, decoration: InputDecoration(labelText: 'Amount', suffixText: '= $_calcResult')),
+        const SizedBox(height: 15),
+        DropdownButtonFormField<AppWallet>(
+          value: wallets.contains(_selectedSourceWallet) ? _selectedSourceWallet : wallets.first,
+          items: wallets.map((w) => DropdownMenuItem(value: w, child: Text(w.name))).toList(),
+          onChanged: (val) => setState(() => _selectedSourceWallet = val),
+          decoration: const InputDecoration(labelText: 'From'),
         ),
-      ),
+        const SizedBox(height: 20),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          ...cats.map((c) => ActionChip(label: Text(c.name), onPressed: () => _saveWithCategory(c))),
+          ActionChip(backgroundColor: Colors.grey[200], label: const Text('+ Add'), onPressed: _showAddLabelDialog),
+        ]),
+        const SizedBox(height: 30),
+      ])),
     );
   }
 }
