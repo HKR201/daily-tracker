@@ -5,6 +5,58 @@ import '../providers/tracker_provider.dart';
 import '../models/app_models.dart';
 import '../widgets/add_tx_sheet.dart'; 
 
+// 🌟 အစ်ကိုနှစ်သက်သော မူလစနစ် ပြန်လည်ရောက်ရှိလာပါပြီ
+class SwipeToDeleteLedgerItem extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDelete;
+  const SwipeToDeleteLedgerItem({super.key, required this.child, required this.onDelete});
+
+  @override
+  State<SwipeToDeleteLedgerItem> createState() => _SwipeToDeleteLedgerItemState();
+}
+
+class _SwipeToDeleteLedgerItemState extends State<SwipeToDeleteLedgerItem> {
+  double _dragExtent = 0;
+  final double _maxDrag = 80;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: (details) {
+        setState(() {
+          _dragExtent -= details.primaryDelta!;
+          if (_dragExtent < 0) _dragExtent = 0;
+          if (_dragExtent > _maxDrag) _dragExtent = _maxDrag;
+        });
+      },
+      onHorizontalDragEnd: (details) {
+        setState(() => _dragExtent = (_dragExtent > _maxDrag / 2) ? _maxDrag : 0);
+      },
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              color: Colors.redAccent,
+              alignment: Alignment.centerRight,
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _dragExtent = 0);
+                  widget.onDelete(); 
+                },
+                child: Container(width: _maxDrag, alignment: Alignment.center, child: const Icon(Icons.delete, color: Colors.white)),
+              ),
+            ),
+          ),
+          Transform.translate(
+            offset: Offset(-_dragExtent, 0),
+            child: Container(color: Theme.of(context).scaffoldBackgroundColor, child: widget.child),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class LedgerPage extends StatefulWidget {
   final String initialLabel; 
   const LedgerPage({super.key, required this.initialLabel});
@@ -105,7 +157,6 @@ class _LedgerPageState extends State<LedgerPage> {
     final p = Provider.of<TrackerProvider>(context);
     final currencyFormat = NumberFormat('#,###');
 
-    // 🌟 OPTIMIZATION: Build အတွင်း တွက်ချက်ခြင်းများကို ဖယ်ရှားပြီး Provider ထဲမှ တိုက်ရိုက်ခေါ်ယူသည်
     final filteredList = p.getFilteredTransactions(_selectedLabel, _filterType, _selectedDate);
 
     double totalAmount = filteredList.fold(0.0, (sum, item) => sum + item.amount);
@@ -177,17 +228,9 @@ class _LedgerPageState extends State<LedgerPage> {
                 String noteText = tx.note.isNotEmpty ? ' • ${tx.note}' : '';
                 String displayDate = DateFormat('dd MMM yyyy').format(DateTime.parse(tx.dateTimestamp));
 
-                // 🌟 UI/UX FIX: Flutter's Built-in Dismissible ကို အသုံးပြုထားသည်
-                return Dismissible(
-                  key: Key(tx.id.toString()),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    color: Colors.redAccent,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  onDismissed: (direction) {
+                // 🌟 ပြန်လည် အစားထိုးထားသော Custom Swipe widget
+                return SwipeToDeleteLedgerItem(
+                  onDelete: () {
                     p.deleteTransaction(tx.id!);
                     
                     ScaffoldMessenger.of(context).clearSnackBars();
