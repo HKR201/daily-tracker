@@ -222,8 +222,31 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     final outSum = p.getSummaryByTypeAndCategory(period, 'Out');
     return ListView(padding: const EdgeInsets.all(15), children: [
       _buildAssetBox(p),
-      ExpansionTile(title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)), leading: const Icon(Icons.arrow_downward, color: Colors.green), children: inSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text('+${p.formatLakh(e.value)}', style: const TextStyle(color: Colors.green)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
-      ExpansionTile(title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)), leading: const Icon(Icons.arrow_upward, color: Colors.redAccent), children: outSum.entries.map((e) => ListTile(title: Text(e.key), trailing: Text('-${p.formatLakh(e.value)}', style: const TextStyle(color: Colors.redAccent)), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key))))).toList()),
+      ExpansionTile(
+        title: Text('Total In (${p.formatLakh(p.getPeriodTotal(period, 'In'))})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)), 
+        leading: const Icon(Icons.arrow_downward, color: Colors.green), 
+        children: inSum.entries.map((e) => ListTile(
+          title: Text(e.key), 
+          trailing: Text('+${p.formatLakh(e.value)}', style: const TextStyle(color: Colors.green)), 
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key)))
+        )).toList()
+      ),
+      ExpansionTile(
+        title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)), 
+        leading: const Icon(Icons.arrow_upward, color: Colors.redAccent), 
+        children: outSum.entries.map((e) {
+          // 🌟 FIX: Vault Screen အတွင်းရှိ Transfer များကို လိမ္မော်ရောင်ပြောင်းပေးခြင်း
+          final cat = p.categories.firstWhere((c) => c.name == e.key, orElse: () => AppCategory(name: 'Unknown', iconData: 0, type: 'Expense'));
+          bool isTransfer = ['BankDeposit', 'HusbandDeposit'].contains(cat.type);
+          Color txColor = isTransfer ? Colors.orange : Colors.redAccent;
+
+          return ListTile(
+            title: Text(e.key), 
+            trailing: Text('-${p.formatLakh(e.value)}', style: TextStyle(color: txColor)), 
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => LedgerPage(initialLabel: e.key)))
+          );
+        }).toList()
+      ),
     ]);
   }
 
@@ -253,7 +276,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     String personName = p.wallets.length > 2 ? p.wallets[2].name : 'ယောကျ်ားစာရင်း';
     return Column(
       mainAxisAlignment: MainAxisAlignment.end, 
-      crossAxisAlignment: CrossAxisAlignment.end, // 🌟 FIX: FAB ခလုတ်များကို ညာဘက်သို့ ကပ်ပေးခြင်း
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         if (_isOpen) ...[_btn(personName, () => _open('HusbandDeposit', personName)), _btn(bankName, () => _open('BankDeposit', bankName)), _btn('အိမ်လွှဲငွေ', () => _open('HomeTransfer', 'အိမ်လွှဲငွေ')), _btn('ဝင်ငွေ', () => _open('Income', 'Income (ဝင်ငွေ)'))],
         FloatingActionButton(onPressed: () => setState(() => _isOpen = !_isOpen), child: Icon(_isOpen ? Icons.close : Icons.add)),
@@ -263,12 +286,6 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
 
   Widget _btn(String l, VoidCallback t) => Padding(padding: const EdgeInsets.only(bottom: 10), child: FloatingActionButton.extended(onPressed: t, label: Text(l), heroTag: l));
   void _open(String t, String ti) { setState(() => _isOpen = false); showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (c) => Container(decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: const BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))), child: AddTxSheet(txType: t, title: ti))); }
-}
-
-class SettingsView extends StatefulWidget {
-  const SettingsView({super.key});
-  @override
-  State<SettingsView> createState() => _SettingsViewState();
 }
 
 class _SettingsViewState extends State<SettingsView> {
