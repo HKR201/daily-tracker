@@ -235,7 +235,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
         title: Text('Total Out (${p.formatLakh(p.getPeriodTotal(period, 'Out'))})', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent)), 
         leading: const Icon(Icons.arrow_upward, color: Colors.redAccent), 
         children: outSum.entries.map((e) {
-          // 🌟 FIX: Vault Screen အတွင်းရှိ Transfer များကို လိမ္မော်ရောင်ပြောင်းပေးခြင်း
+          // 🌟 Transfer များကို လိမ္မော်ရောင်ပြောင်းပေးခြင်း
           final cat = p.categories.firstWhere((c) => c.name == e.key, orElse: () => AppCategory(name: 'Unknown', iconData: 0, type: 'Expense'));
           bool isTransfer = ['BankDeposit', 'HusbandDeposit'].contains(cat.type);
           Color txColor = isTransfer ? Colors.orange : Colors.redAccent;
@@ -276,7 +276,7 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
     String personName = p.wallets.length > 2 ? p.wallets[2].name : 'ယောကျ်ားစာရင်း';
     return Column(
       mainAxisAlignment: MainAxisAlignment.end, 
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.end, // 🌟 FAB Right Align
       children: [
         if (_isOpen) ...[_btn(personName, () => _open('HusbandDeposit', personName)), _btn(bankName, () => _open('BankDeposit', bankName)), _btn('အိမ်လွှဲငွေ', () => _open('HomeTransfer', 'အိမ်လွှဲငွေ')), _btn('ဝင်ငွေ', () => _open('Income', 'Income (ဝင်ငွေ)'))],
         FloatingActionButton(onPressed: () => setState(() => _isOpen = !_isOpen), child: Icon(_isOpen ? Icons.close : Icons.add)),
@@ -286,6 +286,13 @@ class _VaultScreenState extends State<VaultScreen> with TickerProviderStateMixin
 
   Widget _btn(String l, VoidCallback t) => Padding(padding: const EdgeInsets.only(bottom: 10), child: FloatingActionButton.extended(onPressed: t, label: Text(l), heroTag: l));
   void _open(String t, String ti) { setState(() => _isOpen = false); showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (c) => Container(decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: const BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25))), child: AddTxSheet(txType: t, title: ti))); }
+}
+
+// 🌟 ဤအပိုင်း ပျောက်သွား၍ Error တက်ခြင်းဖြစ်သည် 🌟
+class SettingsView extends StatefulWidget {
+  const SettingsView({super.key});
+  @override
+  State<SettingsView> createState() => _SettingsViewState();
 }
 
 class _SettingsViewState extends State<SettingsView> {
