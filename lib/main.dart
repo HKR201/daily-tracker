@@ -147,12 +147,16 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                   final tx = p.transactions[i];
                   final cat = p.categories.firstWhere((c) => c.id == tx.categoryId, orElse: () => AppCategory(name: 'Unknown', iconData: 0xe000, type: 'Expense'));
                   
-                  // 🌟 FIX: အရောင်ခွဲခြားခြင်း (Transfer များကို လိမ္မော်ရောင်/အဝါရင့်ရောင် သုံးထားသည် - မြင်သာအောင်)
                   bool isTransfer = ['BankDeposit', 'HusbandDeposit'].contains(tx.type);
                   bool isExp = ['Expense', 'HomeTransfer'].contains(tx.type);
-                  
                   Color txColor = isTransfer ? Colors.orange : (isExp ? Colors.redAccent : Colors.green);
                   String sign = (isExp || isTransfer) ? '-' : '+';
+
+                  // 🌟 ရက်စွဲနှင့် နေ့ (Day) တွက်ချက်ခြင်း
+                  DateTime txDate = DateTime.parse(tx.dateTimestamp);
+                  String dateStr = DateFormat('d.M.yyyy').format(txDate); // ဥပမာ: 26.3.2026
+                  String dayStr = DateFormat('E').format(txDate); // ဥပမာ: Mon, Tue...
+                  bool isWeekend = txDate.weekday == DateTime.saturday || txDate.weekday == DateTime.sunday;
 
                   return SwipeToDeleteItem(
                     onDelete: () {
@@ -162,9 +166,41 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
                     },
                     child: ListTile(
                       leading: CircleAvatar(backgroundColor: txColor.withOpacity(0.1), child: Icon(IconData(cat.iconData, fontFamily: 'MaterialIcons'), color: txColor)),
-                      title: Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(tx.note.isEmpty ? 'No Note' : tx.note),
-                      trailing: Text('$sign${currencyFormat.format(tx.amount)}', style: TextStyle(color: txColor, fontWeight: FontWeight.bold, fontSize: 16))
+                      
+                      // 🌟 Label အမည်နှင့် Day Highlight (Size အနည်းငယ် လျှော့ထားသည်)
+                      title: Row(
+                        children: [
+                          Text(cat.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), 
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isWeekend ? Colors.redAccent.withOpacity(0.1) : Colors.grey.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(dayStr, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isWeekend ? Colors.redAccent : Colors.grey[600])),
+                          ),
+                        ],
+                      ),
+                      
+                      // 🌟 Date (ဘယ်စွန်) နှင့် Note (ရှိမှသာ ပြမည်)
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            Text(dateStr, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500)),
+                            if (tx.note.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text('• ${tx.note}', style: const TextStyle(fontSize: 12, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                              ),
+                            ]
+                          ],
+                        ),
+                      ),
+                      
+                      // 🌟 Amount ပြသခြင်း (Size အနည်းငယ် လျှော့ထားသည်)
+                      trailing: Text('$sign${currencyFormat.format(tx.amount)}', style: TextStyle(color: txColor, fontWeight: FontWeight.bold, fontSize: 14))
                     ),
                   );
                 }
@@ -177,6 +213,7 @@ class _DailyHubScreenState extends State<DailyHubScreen> {
     );
   }
 }
+
 // ==========================================
 // THE VAULT & SETTINGS SCREEN
 // ==========================================
